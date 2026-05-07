@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Anchor 0.29 invokes `cargo build-bpf`; map it to `cargo-build-sbf`.
+if [[ "${1-}" == "build-bpf" ]]; then
+  shift
+fi
+
+exec cargo-build-sbf "$@"
