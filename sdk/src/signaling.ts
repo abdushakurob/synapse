@@ -15,6 +15,7 @@ export interface SignalingAdapter {
   createSession(initiator: PublicKey, responder: PublicKey, encryptedOffer: Uint8Array): Promise<SessionRecord>;
   respondToSession(sessionPDA: PublicKey, encryptedAnswer: Uint8Array): Promise<void>;
   waitForAnswer(sessionPDA: PublicKey, timeoutMs?: number): Promise<Uint8Array>;
+  getSession(sessionPDA: PublicKey): Promise<SessionRecord | undefined>;
 }
 
 /**
@@ -30,10 +31,14 @@ export class InMemorySignalingAdapter implements SignalingAdapter {
     encryptedOffer: Uint8Array,
   ): Promise<SessionRecord> {
     const createdAt = Date.now();
-    const seed = `${initiator.toBase58()}-${responder.toBase58()}-${createdAt}`;
     const [sessionPDA] = PublicKey.findProgramAddressSync(
-      [Buffer.from("session"), Buffer.from(seed)],
-      initiator,
+      [
+        Buffer.from("session"),
+        initiator.toBuffer(),
+        responder.toBuffer(),
+        Buffer.from(createdAt.toString()), // Using string for now to match simplicity, though le_bytes is better
+      ],
+      new PublicKey("eCv677gAYX6ptLtJrPv9Rj8C4eGA4c9ecswRT5QJbeG"), // Program ID from AGENTS.md
     );
 
     const record: SessionRecord = {
@@ -72,6 +77,10 @@ export class InMemorySignalingAdapter implements SignalingAdapter {
     }
 
     throw new Error(`[Signaling] Timeout waiting for answer on ${key}`);
+  }
+  
+  async getSession(sessionPDA: PublicKey): Promise<SessionRecord | undefined> {
+    return this.sessions.get(sessionPDA.toBase58());
   }
 }
 

@@ -1,69 +1,90 @@
-import { Keypair } from "@solana/web3.js";
-import { EventEmitter } from "events";
-import type Peer from "simple-peer";
-import { Channel } from "./channel";
-import { SessionManager } from "./session-manager";
+import { Synapse } from "./index";
+import { Keypair, PublicKey } from "@solana/web3.js";
+import { SessionRecord } from "./signaling";
 
-async function run(): Promise<void> {
-  console.log("[Test] SessionManager queue behavior");
-  const createdChannels: Channel[] = [];
-
-  const manager = new SessionManager({
-    maxConcurrent: 1,
-    processInbound: async (queued) => {
-      const channel = createDisconnectedChannel();
-      createdChannels.push(channel);
-      return {
-        sessionPDA: queued.sessionPDA.toBase58(),
-        channel,
-        direction: "inbound",
-        remotePubkey: Keypair.generate().publicKey.toBase58(),
-        openedAt: Date.now(),
-        status: "active",
-      };
-    },
-    isQueuedSessionExpired: () => false,
+async function runTest() {
+  console.log("[Test] Initializing Agent B with maxConcurrent = 1...");
+  const synapseB = new Synapse({
+    profile: "agent-b",
+    keypair: Keypair.generate(),
+    maxConcurrent: 1, // Only 1 active session at a time
   });
 
-  const first = Keypair.generate().publicKey;
-  const second = Keypair.generate().publicKey;
+  const remoteAgent = Keypair.generate().publicKey;
 
-  await manager.handleInbound(first, Uint8Array.from([1]));
-  await manager.handleInbound(second, Uint8Array.from([2]));
+  const createDummyRecord = (id: number): SessionRecord => {
+    const payload = new Uint8Array(24 + 10); // 24 bytes nonce + 10 bytes dummy cipher
+    payload[24] = id;
+    return {
+      sessionPDA: Keypair.generate().publicKey,
+      initiator: remoteAgent,
+      responder: synapseB.keypair.publicKey,
+      encryptedOffer: payload,
+      status: "pending",
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 5000,
+    };
+  };
 
-  if (manager.list().length !== 1) {
-    throw new Error("[Test] Expected one active session before dequeue");
+  console.log("[Test] Mocking decryptConnectionData to bypass crypto for this test...");
+  let activeCount = 0;
+  (synapseB as any).acceptInbound = async (record: SessionRecord) => {
+    activeCount++;
+    console.log(`[Test] Agent B accepting session ${record.sessionPDA.toBase58()}. Active: ${activeCount}`);
+    // We skip the real decryption logic for this management test
+    const channel = { 
+        onClose: () => {}, 
+        onMessage: () => {},
+        send: () => {} 
+    } as any;
+    
+    // Manually register it in sessions as acceptInbound would
+    await synapseB.sessions.registerOutbound(record.sessionPDA, channel, remoteAgent.toBase58());
+    
+    return channel;
+  };
+
+  console.log("[Test] Simulating 3 inbound sessions...");
+  const record1 = createDummyRecord(1);
+  const record2 = createDummyRecord(2);
+  const record3 = createDummyRecord(3);
+
+  // Add records to signaling layer so handleInbound/processInbound can find them
+  const signaling = (synapseB as any).signaling;
+  signaling.sessions.set(record1.sessionPDA.toBase58(), record1);
+  signaling.sessions.set(record2.sessionPDA.toBase58(), record2);
+  signaling.sessions.set(record3.sessionPDA.toBase58(), record3);
+
+  // We manually call handleInbound which should queue them
+  await synapseB.sessions.handleInbound(record1.sessionPDA, record1.encryptedOffer);
+  await synapseB.sessions.handleInbound(record2.sessionPDA, record2.encryptedOffer);
+  await synapseB.sessions.handleInbound(record3.sessionPDA, record3.encryptedOffer);
+
+  console.log(`[Test] Active sessions in manager: ${synapseB.sessions.list().length}`);
+  console.log(`[Test] Queue length: ${(synapseB.sessions as any).inboundQueue.length}`);
+
+  if (synapseB.sessions.list().length !== 1) {
+    console.error("[Test] Failed: Too many active sessions!");
+    process.exit(1);
   }
 
-  await manager.remove(first.toBase58());
+  console.log("[Test] Closing first session to trigger dequeue...");
+  const activeSession = synapseB.sessions.list()[0];
+  await synapseB.sessions.remove(activeSession.sessionPDA);
 
-  if (manager.get(second.toBase58()) === undefined) {
-    throw new Error("[Test] Expected queued session to auto-dequeue after remove");
+  // Wait a bit for async dequeue
+  await new Promise(resolve => setTimeout(resolve, 100));
+
+  console.log(`[Test] Active sessions after close: ${synapseB.sessions.list().length}`);
+  console.log(`[Test] Queue length after close: ${(synapseB.sessions as any).inboundQueue.length}`);
+
+  if (synapseB.sessions.list().length !== 1) {
+    console.error("[Test] Failed: Queue did not process!");
+    process.exit(1);
   }
 
-  for (const channel of createdChannels) {
-    channel.close();
-  }
-
-  console.log("[Test] PASSED");
+  console.log("[Test] Success! Queuing and multi-session logic verified.");
+  process.exit(0);
 }
 
-function createDisconnectedChannel(): Channel {
-  const peer = new FakePeer() as unknown as Peer.Instance;
-  return new Channel(peer);
-}
-
-class FakePeer extends EventEmitter {
-  send(_payload: string): void {
-    // No-op for queue behavior test.
-  }
-
-  destroy(): void {
-    this.emit("close");
-  }
-}
-
-void run().catch((error: unknown) => {
-  console.error("[Test] FAILED", error);
-  process.exit(1);
-});
+runTest();

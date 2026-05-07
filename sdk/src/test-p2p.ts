@@ -1,50 +1,72 @@
-import { createOffer, createAnswer, completeConnection, WebRTCConnection } from "./webrtc";
+import { Synapse } from "./index";
+import { Keypair } from "@solana/web3.js";
 
-async function testP2P() {
-  console.log("[Test] Milestone 2 — WebRTC P2P Connection");
+async function runTest() {
+  console.log("[Test] Initializing agents...");
 
+  // Setup Registry and Signaling (shared mock state)
+  const synapseA = new Synapse({
+    profile: "agent-a",
+    keypair: Keypair.generate(),
+  });
+
+  const synapseB = new Synapse({
+    profile: "agent-b",
+    keypair: Keypair.generate(),
+    // Use the same signaling/registry instances so they can "find" each other
+    signaling: (synapseA as any).signaling,
+    registry: (synapseA as any).registry,
+  });
+
+  console.log("[Test] Registering Agent B...");
+  await synapseB.register("meridian-trading");
+
+  console.log("[Test] Agent B starting listener...");
+  synapseB.onConnection((channel, from) => {
+    console.log(`[Agent B] Incoming connection from: ${from}`);
+    channel.onMessage((msg) => {
+      console.log(`[Agent B] Received message:`, msg);
+      channel.send({ type: "status", message: "Hello from Agent B!" });
+    });
+  });
+
+  // Since we are using InMemory, we need to simulate the "polling" or "event"
+  // that triggers acceptInbound on Agent B when Agent A creates a session.
+  // In a real Solana setup, this would be a watcher on the Session PDAs.
+  const originalCreateSession = (synapseA as any).signaling.createSession;
+  (synapseA as any).signaling.createSession = async (...args: any[]) => {
+    const record = await originalCreateSession.apply((synapseA as any).signaling, args);
+    console.log(`[Test] Signaling: New session created ${record.sessionPDA.toBase58()}`);
+    
+    // Simulate Agent B picking up the session
+    setTimeout(() => {
+      console.log("[Test] Agent B picking up session from signaling...");
+      synapseB.acceptInbound(record).catch(err => console.error("[Test] Agent B accept failed:", err));
+    }, 500);
+
+    return record;
+  };
+
+  console.log("[Test] Agent A connecting to Agent B...");
   try {
-    // 1. Agent A creates an offer
-    console.log("[Agent A] Creating offer...");
-    const connectionA = await createOffer();
-    const offerData = connectionA.data;
-    console.log("[Agent A] Offer created.");
+    const channelA = await synapseA.connect("meridian-trading");
+    console.log("[Test] Agent A connected!");
 
-    // 2. Agent B receives offer and creates an answer
-    console.log("[Agent B] Creating answer...");
-    const connectionB = await createAnswer(offerData);
-    const answerData = connectionB.data;
-    console.log("[Agent B] Answer created.");
-
-    // 3. Agent A receives answer and completes connection
-    console.log("[Agent A] Completing connection...");
-
-    // Set up message listeners
-    connectionA.peer.on("data", (data) => {
-      console.log(`[Agent A] Received: ${data.toString()}`);
+    channelA.onMessage((msg) => {
+      console.log(`[Agent A] Received message:`, msg);
     });
 
-    connectionB.peer.on("data", (data) => {
-      console.log(`[Agent B] Received: ${data.toString()}`);
-      connectionB.peer.send("hello back from agent b");
-    });
+    console.log("[Test] Agent A sending RFQ...");
+    channelA.send({ type: "rfq", asset: "SYN", quantity: 500000, side: "buy" });
 
-    await completeConnection(connectionA.peer, answerData);
-    console.log("[Agent A] Connected!");
-
-    // 4. Exchange messages
-    console.log("[Agent A] Sending: hello from agent a");
-    connectionA.peer.send("hello from agent a");
-
-    // Wait for messages to be exchanged
+    // Keep alive for a bit to see the response
     await new Promise(resolve => setTimeout(resolve, 2000));
-
-    console.log("[Test] PASSED");
+    console.log("[Test] Success! Connection verified.");
     process.exit(0);
-  } catch (err) {
-    console.error("[Test] FAILED:", err);
+  } catch (err: any) {
+    console.error("[Test] Connection failed:", err.message);
     process.exit(1);
   }
 }
 
-testP2P();
+runTest();

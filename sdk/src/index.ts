@@ -1,6 +1,6 @@
 import { Keypair, PublicKey } from "@solana/web3.js";
 import { Channel } from "./channel";
-import { decrypt, ed25519ToCurve25519, encrypt } from "./crypto";
+import { decrypt, ed25519SecretToCurve25519, ed25519ToCurve25519, encrypt } from "./crypto";
 import { InMemoryRegistryAdapter, RegistryAdapter } from "./registry";
 import { InMemorySignalingAdapter, SessionRecord, SignalingAdapter } from "./signaling";
 import { ManagedSession, SessionManager } from "./session-manager";
@@ -40,7 +40,14 @@ export class Synapse {
 
     this.sessions = new SessionManager({
       maxConcurrent: options.maxConcurrent ?? 10,
-      processInbound: async () => null,
+      processInbound: async (queued) => {
+        // Build a temporary record to satisfy acceptInbound
+        // In a real setup, we would fetch the full record from signaling
+        const record = await this.signaling.getSession(queued.sessionPDA);
+        if (!record) return null;
+        const channel = await this.acceptInbound(record);
+        return this.sessions.get(record.sessionPDA.toBase58()) || null;
+      },
     });
   }
 
@@ -112,7 +119,7 @@ function encryptConnectionData(
   sender: Keypair,
   recipient: PublicKey,
 ): Uint8Array {
-  const senderCurveSecret = ed25519ToCurve25519(sender.secretKey.slice(0, 32));
+  const senderCurveSecret = ed25519SecretToCurve25519(sender.secretKey.slice(0, 32));
   const recipientCurvePublic = ed25519ToCurve25519(recipient.toBytes());
   const payload = new TextEncoder().encode(JSON.stringify(data));
   return encrypt(payload, senderCurveSecret, recipientCurvePublic);
@@ -123,7 +130,7 @@ function decryptConnectionData(
   recipient: Keypair,
   sender: PublicKey,
 ): ConnectionData {
-  const recipientCurveSecret = ed25519ToCurve25519(recipient.secretKey.slice(0, 32));
+  const recipientCurveSecret = ed25519SecretToCurve25519(recipient.secretKey.slice(0, 32));
   const senderCurvePublic = ed25519ToCurve25519(sender.toBytes());
   const decrypted = decrypt(encrypted, recipientCurveSecret, senderCurvePublic);
   const parsed = JSON.parse(new TextDecoder().decode(decrypted)) as ConnectionData;

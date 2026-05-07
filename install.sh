@@ -9,4 +9,12 @@ cargo install --git https://github.com/coral-xyz/anchor avm --locked --force
 ~/.cargo/bin/avm install 0.29.0
 ~/.cargo/bin/avm use 0.29.0
 
+
+echo "Installing Node dependencies..."
+cd sdk && npm install && cd ..
+cd program && npm install && cd ..
+
+echo "Building Solana program..."
+cd program && anchor build && cd ..
+
 echo "Done."

@@ -1,10 +1,20 @@
 import nacl from "tweetnacl";
+import * as ed2curve from "ed2curve";
 
 export function ed25519ToCurve25519(publicKey: Uint8Array): Uint8Array {
-  if (publicKey.length !== nacl.box.publicKeyLength) {
-    throw new Error("[Crypto] Invalid public key length");
+  const curvePublic = ed2curve.convertPublicKey(publicKey);
+  if (!curvePublic) {
+    throw new Error("[Crypto] Failed to convert public key to Curve25519");
   }
-  return publicKey;
+  return curvePublic;
+}
+
+export function ed25519SecretToCurve25519(secretKey: Uint8Array): Uint8Array {
+  const curveSecret = ed2curve.convertSecretKey(secretKey);
+  if (!curveSecret) {
+    throw new Error("[Crypto] Failed to convert secret key to Curve25519");
+  }
+  return curveSecret;
 }
 
 export function encrypt(
