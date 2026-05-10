@@ -51,7 +51,10 @@ export class Synapse {
   }
 
   async register(alias: string): Promise<void> {
-    await this.registry.register(alias, this.keypair.publicKey);
+    const signature = await this.registry.register(alias, this.keypair.publicKey);
+    if (signature && this.onTransaction) {
+      this.onTransaction(signature as string, `Registered Protocol Alias: ${alias}`);
+    }
   }
 
   onConnection(handler: ConnectionHandler): void {

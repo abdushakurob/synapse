@@ -17,7 +17,7 @@ export class AliasTakenError extends Error {
 }
 
 export interface RegistryAdapter {
-  register(alias: string, owner: PublicKey): Promise<void>;
+  register(alias: string, owner: PublicKey): Promise<string | void>;
   resolve(alias: string): Promise<PublicKey>;
 }
 
@@ -58,16 +58,17 @@ export class SolanaRegistryAdapter implements RegistryAdapter {
     return pda;
   }
 
-  async register(alias: string): Promise<void> {
+  async register(alias: string): Promise<string | void> {
     try {
       const pda = await this.getPDA(alias);
-      await (this.program.methods as any)
+      const signature = await (this.program.methods as any)
         .registerAgent(alias)
         .accounts({
           agentRegistry: pda,
           owner: this.program.provider.publicKey,
         })
         .rpc();
+      return signature;
     } catch (err: any) {
       if (err.message.includes("already in use")) {
         throw new AliasTakenError(alias);

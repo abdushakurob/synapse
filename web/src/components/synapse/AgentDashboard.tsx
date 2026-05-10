@@ -119,7 +119,7 @@ export function AgentDashboard({ firmName, wsPort, accentColor }: AgentDashboard
             <div className="bg-background/80 border-b border-border px-4 py-3 flex justify-between items-center">
               <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">P2P Negotiation Stream</span>
               
-              {isConnected && firmName === "Apex Capital" && !hasStarted && (
+              {isConnected && firmName === "Apex Capital" && !hasStarted && !activeSession && (
                 <button 
                   onClick={startNegotiation}
                   className="px-4 py-1.5 bg-primary/20 text-primary border border-primary/30 hover:bg-primary/30 transition-all rounded-lg text-[10px] font-mono uppercase tracking-widest animate-pulse"
@@ -128,7 +128,13 @@ export function AgentDashboard({ firmName, wsPort, accentColor }: AgentDashboard
                 </button>
               )}
               {hasStarted && !activeSession && (
-                <div className="text-[10px] font-mono text-amber-500 animate-pulse uppercase">Handshaking...</div>
+                <div className="text-[10px] font-mono text-amber-500 animate-pulse uppercase tracking-widest">Handshaking via Solana...</div>
+              )}
+              {activeSession && (
+                <div className="text-[10px] font-mono text-emerald-500 uppercase tracking-widest flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                  P2P Active
+                </div>
               )}
             </div>
             
