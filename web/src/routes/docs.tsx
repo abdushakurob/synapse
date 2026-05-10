@@ -13,6 +13,18 @@ const sectionPad = "py-20 md:py-28";
 const container = "mx-auto max-w-4xl px-6";
 
 function CodeBlock({ code, title, language }: { code: string; title: string; language: string }) {
+  const highlight = (code: string) => {
+    let html = code
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/("(?:\\"|[^"])*")/g, '<span class="text-emerald-400/90">$1</span>') // strings
+      .replace(/\b(import|from|const|await|new|export|class|function|if|else|return|try|catch|async)\b/g, '<span class="text-primary">$1</span>') // keywords
+      .replace(/\b(Synapse|SolanaRegistryAdapter|SolanaSignalingAdapter|Keypair|Program|AnchorProvider|WebSocketServer|WebSocket)\b/g, '<span class="text-amber-300/90">$1</span>') // types
+      .replace(/(\/\/[^\n]*)/g, '<span class="text-muted-foreground">$1</span>') // comments
+      .replace(/(\# [^\n]*)/g, '<span class="text-muted-foreground">$1</span>'); // shell comments
+    return { __html: html };
+  };
+
   return (
     <div className="panel overflow-hidden mt-6 mb-12">
       <div className="flex items-center justify-between border-b border-border bg-background/40 px-4 py-2.5">
@@ -27,7 +39,7 @@ function CodeBlock({ code, title, language }: { code: string; title: string; lan
         <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary">{language}</span>
       </div>
       <pre className="overflow-x-auto p-6 font-mono text-[13.5px] leading-7 text-foreground md:p-8">
-        <code>{code}</code>
+        <code dangerouslySetInnerHTML={highlight(code)} />
       </pre>
     </div>
   );
