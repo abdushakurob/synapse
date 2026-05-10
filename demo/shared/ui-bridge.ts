@@ -49,6 +49,7 @@ export class UIBridge {
 
     // Persist critical state
     if (["session_opened", "portfolio_updated", "active_sessions"].includes(event)) {
+      console.log(`[UI Bridge] Persisting state for event: ${event}`);
       this.state[event] = data;
     }
     

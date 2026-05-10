@@ -136,7 +136,7 @@ export class SolanaSignalingAdapter implements SignalingAdapter {
           session: sessionPDA,
           initiator: initiator,
           responder: responder,
-          responderRegistry: responderRegistryPDA,
+          responder_registry: responderRegistryPDA,
         })
         .rpc();
     } catch (err: any) {

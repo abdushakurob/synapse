@@ -1,51 +1,63 @@
 #!/bin/bash
 
+# Exit on any error
+set -e
+
 # Kill any existing demo processes
 pkill -f ts-node || true
 pkill -f vite || true
 
-# Build SDK to ensure latest methods are available
-(cd sdk && npm run build)
+echo "---------------------------------------------------------"
+echo "🚀 SYNAPSE PROTOCOL: DECENTRALIZED TRADING DEMO"
+echo "---------------------------------------------------------"
 
-# Create wallets if they don't exist
+# 1. Build and Link SDK
+echo "[1/4] Preparing SDK and CLI..."
+(cd sdk && npm run build)
+(cd cli && npm run build)
+
+# 2. Setup Identities
 if [ ! -f "dev-wallet-a.json" ]; then
-  echo "Creating Wallet A..."
-  solana-keygen new --no-passphrase -o dev-wallet-a.json
-  solana airdrop 1 -u devnet -k dev-wallet-a.json
-  echo "Waiting for Wallet A balance..."
-  while [ $(solana balance -u devnet -k dev-wallet-a.json | cut -d' ' -f1 | cut -d. -f1) -eq 0 ]; do sleep 1; done
+  echo "Generating Identity for Apex Capital (Agent A)..."
+  solana-keygen new --no-passphrase -o dev-wallet-a.json -q
+  solana airdrop 1 -u devnet -k dev-wallet-a.json || echo "Airdrop failed, hopefully you have balance."
 fi
 
 if [ ! -f "dev-wallet-b.json" ]; then
-  echo "Creating Wallet B..."
-  solana-keygen new --no-passphrase -o dev-wallet-b.json
-  solana airdrop 1 -u devnet -k dev-wallet-b.json
-  echo "Waiting for Wallet B balance..."
-  while [ $(solana balance -u devnet -k dev-wallet-b.json | cut -d' ' -f1 | cut -d. -f1) -eq 0 ]; do sleep 1; done
+  echo "Generating Identity for Meridian Trading (Agent B)..."
+  solana-keygen new --no-passphrase -o dev-wallet-b.json -q
+  solana airdrop 1 -u devnet -k dev-wallet-b.json || echo "Airdrop failed, hopefully you have balance."
 fi
 
-echo "---------------------------------------------------------"
-echo "🚀 SYNAPSE PROTOCOL DEMO"
-echo "---------------------------------------------------------"
-
-echo "[1/3] Starting Meridian Trading (Agent B) on Port 3002..."
+# 3. Start Responder (Agent B)
+echo "[2/4] Starting Meridian Trading (Responder) on Port 3002..."
 (cd demo && npm run agent-b > agent-b.log 2>&1) &
 B_PID=$!
 
-echo "[2/3] Starting React Frontend (Web)..."
+# 4. Start Web Dashboard
+echo "[3/4] Starting Web Control Center..."
 (cd web && npm run dev > web.log 2>&1) &
 WEB_PID=$!
 
-echo "Waiting for services to initialize..."
-sleep 8
+echo "Waiting for agents to synchronize with Solana Devnet..."
+sleep 10
 
-echo "[3/3] Starting Apex Capital (Agent A) on Port 3001..."
-echo "Follow the negotiation: http://localhost:5173/demo"
+# 5. Start Initiator (Agent A)
+echo "[4/4] Starting Apex Capital (Initiator) on Port 3001..."
+echo ""
+echo "👉 OPEN THE DASHBOARD: http://localhost:5173/agent-a"
+echo "👉 OPEN THE RESPONDER: http://localhost:5173/agent-b"
+echo ""
+echo "Press 'Initiate Connection' on the Apex Capital dashboard to start."
 echo "---------------------------------------------------------"
 
 # Start Agent A in foreground
-(cd demo && npm run agent-a)
+cd demo && npm run agent-a
 
 # Cleanup on exit
-kill $B_PID
-kill $WEB_PID
+function cleanup {
+  echo "Cleaning up..."
+  kill $B_PID || true
+  kill $WEB_PID || true
+}
+trap cleanup EXIT

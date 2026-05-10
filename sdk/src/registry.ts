@@ -48,7 +48,7 @@ export class SolanaRegistryAdapter implements RegistryAdapter {
       const signature = await (this.program.methods as any)
         .registerAgent(alias, category, capabilities)
         .accounts({
-          agentRegistry: pda,
+          agent_registry: pda,
           owner: this.program.provider.publicKey,
         })
         .rpc();
@@ -80,7 +80,7 @@ export class SolanaRegistryAdapter implements RegistryAdapter {
         options.capabilities || null
       )
       .accounts({
-        agentRegistry: pda,
+        agent_registry: pda,
         owner: this.program.provider.publicKey,
       })
       .rpc();

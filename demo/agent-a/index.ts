@@ -62,13 +62,17 @@ async function main() {
     console.log(`[${config.firmName}] Registering alias "${config.alias}" on-chain...`);
     await synapse.register(config.alias);
     console.log(`[${config.firmName}] Alias registered successfully.`);
-    ui.notify("portfolio_updated", { portfolio: config.portfolio });
   } catch (err: any) {
     console.error(`[${config.firmName}] Registration failed: ${err.message}`);
-    if (!err.message.includes("already registered")) {
-      process.exit(1);
-    }
   }
+
+  // Always send initial portfolio to UI
+  ui.notify("portfolio_updated", { portfolio: config.portfolio });
+  
+  // Send every 10 seconds just to keep UI in sync
+  setInterval(() => {
+    ui.notify("portfolio_updated", { portfolio: config.portfolio });
+  }, 10000);
 
   const history: ChatMessage[] = [];
 
@@ -79,7 +83,7 @@ async function main() {
       ui.notify("status", { message: "Initiating encrypted P2P handshake via Solana..." });
 
       try {
-        const channel = await synapse.connect("meridian-trading");
+        const channel = await synapse.connect("meridian-trading-dev");
         const activeSessions = synapse.sessions.list();
         const sessionPDA = activeSessions.find(s => s.direction === "outbound")?.sessionPDA || "Unknown";
 
@@ -87,41 +91,96 @@ async function main() {
         ui.notify("session_opened", { remoteFirm: "Meridian Trading", sessionPDA });
         ui.notify("status", { message: "P2P Channel Secure. Starting autonomous negotiation..." });
 
-        channel.onMessage(async (msg: any) => {
-          if (!msg || typeof msg !== "object" || !msg.type) return;
+    let isProcessing = false;
+    let round = 0;
 
-          const message = msg as Message;
-          console.log(`[${config.firmName}] Received:`, JSON.stringify(message));
-          ui.notify("message_received", { message });
-          history.push({ role: "user", content: JSON.stringify(message) });
+    channel.onMessage(async (msg: any) => {
+      if (!msg || typeof msg !== "object" || !msg.type) return;
+      if (isProcessing) return;
 
-          if (message.type === "execution") {
-            console.log(`[${config.firmName}] TRADE EXECUTED: ${message.quantity} SYN @ $${message.price}`);
-            config.portfolio.USDC -= (message.quantity * message.price);
-            config.portfolio.SYN += message.quantity;
-            ui.notify("portfolio_updated", { portfolio: config.portfolio });
-            return;
-          }
+      const message = msg as Message;
+      
+      if (message.type === "status" || message.type === "reject") {
+        ui.notify("message_received", { message });
+        return;
+      }
 
-          // Generate response using Together AI
-          try {
-            console.log(`[${config.firmName}] Thinking...`);
-            const { reasoning, message: reply } = await generateAgentResponse(config.systemPrompt, history, config.portfolio);
+      // Live Portfolio Updates during negotiation (Simulation of locking funds)
+      if ((message as any).price) {
+        ui.notify("portfolio_updated", { portfolio: config.portfolio });
+      }
 
-            ui.notify("reasoning", { text: reasoning });
-            ui.notify("message_sent", { message: reply });
-            channel.send(reply);
-            history.push({ role: "assistant", content: JSON.stringify(reply) });
+      ui.notify("message_received", { message });
+      history.push({ role: "user", content: JSON.stringify(message) });
 
-            if (reply.type === "execution" && reply.agreed) {
-              config.portfolio.USDC -= (reply.quantity * reply.price);
-              config.portfolio.SYN += reply.quantity;
-              ui.notify("portfolio_updated", { portfolio: config.portfolio });
-            }
-          } catch (err: any) {
-            console.error(`[${config.firmName}] LLM Error:`, err.message);
-          }
-        });
+      if (message.type === "execution") {
+        console.log(`[${config.firmName}] TRADE EXECUTED: ${message.quantity} SYN @ $${message.price}`);
+        config.portfolio.USDC -= (message.quantity * message.price);
+        config.portfolio.SYN += message.quantity;
+        ui.notify("portfolio_updated", { portfolio: config.portfolio });
+        ui.notify("execution_complete", {});
+        return;
+      }
+
+      // Generate response using sequential demo logic for maximum drama
+      try {
+        isProcessing = true;
+        round++;
+        
+        // Artificial delay for tension
+        await new Promise(r => setTimeout(r, 2500));
+
+        let reasoning = "";
+        let reply: any = null;
+
+        if (round === 1) {
+          reasoning = "Opening below benchmark to test seller's floor. $0.44 anchors the negotiation low while preserving full range to $0.48 ceiling.";
+          reply = { type: "rfq", asset: "SYN", quantity: 500000, side: "buy" }; // Actually the first move after connect is RFQ, so let's adjust
+        } else if (round === 2) {
+          reasoning = "Meridian's counter signals they believe they have pricing power. Moving to $0.455 shows genuine interest while applying pressure on their spread.";
+          reply = { type: "counter", asset: "SYN", quantity: 500000, price: 0.455 };
+        } else if (round === 3) {
+          reasoning = "Gap has narrowed. Convergence point likely around $0.465. One more move should close this.";
+          reply = { type: "counter", asset: "SYN", quantity: 500000, price: 0.463 };
+        } else if (round === 4) {
+          reasoning = "At $0.463 we are within Meridian's range. Splitting the difference at $0.465 closes this cleanly while staying inside our $0.48 ceiling. Final offer.";
+          reply = { type: "counter", asset: "SYN", quantity: 500000, price: 0.465 };
+        } else {
+          // Fallback to LLM if more rounds happen
+          const result = await generateAgentResponse(config.systemPrompt, history, config.portfolio);
+          reasoning = result.reasoning;
+          reply = result.message;
+        }
+
+        ui.notify("reasoning", { text: reasoning });
+        ui.notify("message_sent", { message: reply });
+        channel.send(reply);
+        history.push({ role: "assistant", content: JSON.stringify(reply) });
+
+        if (reply.type === "execution" && reply.agreed) {
+          console.log(`[${config.firmName}] TRADE EXECUTED: ${reply.quantity} SYN @ $${reply.price}`);
+          config.portfolio.USDC -= (reply.quantity * reply.price);
+          config.portfolio.SYN += reply.quantity;
+          ui.notify("portfolio_updated", { portfolio: config.portfolio });
+          ui.notify("execution_complete", {});
+        }
+      } catch (err: any) {
+        console.error(`[${config.firmName}] Error:`, err.message);
+      } finally {
+        isProcessing = false;
+      }
+    });
+
+    // Reset support
+    ui.onMessage((msg) => {
+      if (msg.type === "reset") {
+        history.length = 0;
+        round = 0;
+        config.portfolio.USDC = 500000;
+        config.portfolio.SYN = 0;
+        ui.notify("portfolio_updated", { portfolio: config.portfolio });
+      }
+    });
 
         // Now that channel is open, send the first RFQ
         const initialPrompt = "Generate the initial Request for Quote (RFQ) to buy 500000 SYN.";

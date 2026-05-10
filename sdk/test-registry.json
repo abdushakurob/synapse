@@ -1,0 +1,5 @@
+{
+  "meridian-trading": "{\"owner\":\"GnMofVRgWgeJdAoTEwbDeqsJwJxMBZFaa1gqNxFeqNRa\",\"category\":\"market-maker\",\"capabilities\":[\"quote\",\"trade\"]}",
+  "apex-capital": "{\"owner\":\"EyGVx8ktJUgFNcSi67Rx1igAQ1dCPyeNVzxqKyunF8vp\",\"category\":\"general\",\"capabilities\":[]}",
+  "rogue-agent": "{\"owner\":\"AGqitiEerjHfPLJjdDuH6ja3jACTvvNq6qYHW3mGwfc3\",\"category\":\"general\",\"capabilities\":[]}"
+}
