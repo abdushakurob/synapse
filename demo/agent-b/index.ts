@@ -9,6 +9,7 @@ import idl from "../../sdk/src/idl.json";
 import { UIBridge } from "../shared/ui-bridge";
 import { config } from "./config";
 import { Message } from "../shared/schema";
+import { generateAgentResponse, ChatMessage } from "../shared/llm";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -58,6 +59,9 @@ async function main() {
       const channel = await synapse.acceptSession(request.sessionPDA.toBase58());
       console.log(`[${config.firmName}] Session accepted and channel opened!`);
       ui.notify("session_opened", { remoteFirm: "Apex Capital", sessionPDA: request.sessionPDA.toBase58() });
+      ui.notify("portfolio_updated", { portfolio: config.portfolio });
+
+      const history: ChatMessage[] = [];
 
       channel.onMessage(async (msg: any) => {
         // Schema validation
@@ -69,48 +73,51 @@ async function main() {
         const message = msg as Message;
         console.log(`[${config.firmName}] Received:`, JSON.stringify(message));
         ui.notify("message_received", { message });
+        
+        history.push({ role: "user", content: JSON.stringify(message) });
 
-        switch (message.type) {
-          case "rfq":
-            console.log(`[${config.firmName}] Processing RFQ for ${msg.quantity} ${msg.asset}`);
-            const quote: Message = { 
-              type: "quote", 
-              asset: msg.asset, 
-              quantity: msg.quantity, 
-              price: 0.47, 
-              expiresIn: 60 
-            };
-            console.log(`[${config.firmName}] Sending Quote: $${quote.price}`);
-            ui.notify("message_sent", { message: quote });
-            channel.send(quote);
-            break;
+        // Handle execution updates to portfolio locally
+        if (message.type === "execution") {
+          if (message.agreed) {
+            console.log(`[${config.firmName}] CONFIRMED: Sold ${message.quantity} SYN @ $${message.price}`);
+            config.portfolio.USDC += (message.quantity * message.price);
+            config.portfolio.SYN -= message.quantity;
+            ui.notify("portfolio_updated", { portfolio: config.portfolio });
+            channel.send({ type: "status", message: "Trade confirmed. Session remains open for inspection." });
+          }
+          return;
+        }
 
-          case "counter":
-            console.log(`[${config.firmName}] Evaluating counter: $${message.price}`);
-            if (message.price >= 0.45) {
-               const finalPrice = 0.455;
-               console.log(`[${config.firmName}] Counter acceptable. Proposing final price: $${finalPrice}`);
-               const reply: Message = { type: "counter", asset: "SYN", quantity: message.quantity, price: finalPrice };
-               ui.notify("message_sent", { message: reply });
-               channel.send(reply);
-            } else {
-               const reply: Message = { type: "reject", reason: "Price too low" };
-               ui.notify("message_sent", { message: reply });
-               channel.send(reply);
-            }
-            break;
+        if (message.type === "reject") {
+          console.log(`[${config.firmName}] Client rejected: ${message.reason}`);
+          return;
+        }
 
-          case "execution":
-            if (message.agreed) {
-              console.log(`[${config.firmName}] CONFIRMED: Sold ${message.quantity} SYN @ $${message.price}`);
-              ui.notify("portfolio_updated", { portfolio: { USDC: message.quantity * message.price, SYN: 2000000 - message.quantity } });
-              channel.send({ type: "status", message: "Trade confirmed. Session remains open for inspection." });
-            }
-            break;
+        if (message.type === "status") {
+          console.log(`[${config.firmName}] Client status: ${message.message}`);
+          return;
+        }
 
-          case "reject":
-            console.log(`[${config.firmName}] Client rejected: ${msg.reason}`);
-            break;
+        try {
+          console.log(`[${config.firmName}] Thinking...`);
+          const { reasoning, message: reply } = await generateAgentResponse(config.systemPrompt, history, config.portfolio);
+          
+          console.log(`[${config.firmName}] Reasoning: ${reasoning}`);
+          ui.notify("reasoning", { text: reasoning });
+          
+          console.log(`[${config.firmName}] Sending:`, JSON.stringify(reply));
+          ui.notify("message_sent", { message: reply });
+          channel.send(reply);
+          
+          history.push({ role: "assistant", content: JSON.stringify(reply) });
+          
+          if (reply.type === "execution" && reply.agreed) {
+             config.portfolio.USDC += (reply.quantity * reply.price);
+             config.portfolio.SYN -= reply.quantity;
+             ui.notify("portfolio_updated", { portfolio: config.portfolio });
+          }
+        } catch (err: any) {
+          console.error(`[${config.firmName}] LLM Error:`, err.message);
         }
       });
     } catch (err: any) {

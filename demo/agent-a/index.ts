@@ -9,6 +9,7 @@ import idl from "../../sdk/src/idl.json";
 import { UIBridge } from "../shared/ui-bridge";
 import { config } from "./config";
 import { Message } from "../shared/schema";
+import { generateAgentResponse, ChatMessage } from "../shared/llm";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -62,6 +63,9 @@ async function main() {
     const sessionPDA = activeSessions.find(s => s.direction === "outbound")?.sessionPDA || "Unknown";
     console.log(`[${config.firmName}] Connected to Meridian Trading.`);
     ui.notify("session_opened", { remoteFirm: "Meridian Trading", sessionPDA });
+    ui.notify("portfolio_updated", { portfolio: config.portfolio });
+
+    const history: ChatMessage[] = [];
 
     channel.onMessage(async (msg: any) => {
       // Schema validation
@@ -74,59 +78,79 @@ async function main() {
       console.log(`[${config.firmName}] Received:`, JSON.stringify(message));
       ui.notify("message_received", { message });
       
-      // State machine for negotiation
-      switch (message.type) {
-        case "quote":
-          console.log(`[${config.firmName}] Evaluating quote: $${msg.price}`);
-          // AI Logic would go here. For now, let's counter or accept.
-          if (msg.price <= 0.45) {
-             console.log(`[${config.firmName}] Price acceptable. Executing...`);
-             channel.send({ type: "execution", asset: "SYN", quantity: msg.quantity, price: msg.price, agreed: true });
-          } else {
-              const counterPrice = 0.45;
-              console.log(`[${config.firmName}] Price too high. Countering at $${counterPrice}`);
-              const reply: Message = { type: "counter", asset: "SYN", quantity: msg.quantity, price: counterPrice };
-              ui.notify("message_sent", { message: reply });
-              channel.send(reply);
-           }
-          break;
+      // Add incoming message to history
+      history.push({ role: "user", content: JSON.stringify(message) });
 
-        case "counter":
-          console.log(`[${config.firmName}] Received counter: $${msg.price}`);
-          // Simplified: accept if below 0.46
-          if (msg.price <= 0.46) {
-             const reply: Message = { type: "execution", asset: "SYN", quantity: msg.quantity, price: msg.price, agreed: true };
-             ui.notify("message_sent", { message: reply });
-             channel.send(reply);
-          } else {
-             const reply: Message = { type: "reject", reason: "Price out of range" };
-             ui.notify("message_sent", { message: reply });
-             channel.send(reply);
-          }
-          break;
+      // Handle execution updates to portfolio locally without needing LLM permission
+      if (message.type === "execution") {
+        console.log(`[${config.firmName}] TRADE EXECUTED: ${message.quantity} SYN @ $${message.price}`);
+        config.portfolio.USDC -= (message.quantity * message.price);
+        config.portfolio.SYN += message.quantity;
+        ui.notify("portfolio_updated", { portfolio: config.portfolio });
+        return;
+      }
 
-        case "execution":
-          console.log(`[${config.firmName}] TRADE EXECUTED: ${message.quantity} SYN @ $${message.price}`);
-          ui.notify("portfolio_updated", { portfolio: { USDC: 500000 - (message.quantity * message.price), SYN: message.quantity } });
-          break;
+      if (message.type === "reject") {
+        console.log(`[${config.firmName}] Negotiation rejected: ${message.reason}`);
+        return;
+      }
 
-        case "reject":
-          console.log(`[${config.firmName}] Negotiation rejected: ${msg.reason}`);
-          break;
+      if (message.type === "status") {
+        console.log(`[${config.firmName}] Status: ${message.message}`);
+        return;
+      }
 
-        case "status":
-          console.log(`[${config.firmName}] Status: ${msg.message}`);
-          break;
+      // Generate response using Together AI
+      try {
+        console.log(`[${config.firmName}] Thinking...`);
+        const { reasoning, message: reply } = await generateAgentResponse(config.systemPrompt, history, config.portfolio);
+        
+        console.log(`[${config.firmName}] Reasoning: ${reasoning}`);
+        ui.notify("reasoning", { text: reasoning });
+        
+        console.log(`[${config.firmName}] Sending:`, JSON.stringify(reply));
+        ui.notify("message_sent", { message: reply });
+        channel.send(reply);
+        
+        history.push({ role: "assistant", content: JSON.stringify(reply) });
+
+        // Update local portfolio if WE just sent an execution
+        if (reply.type === "execution" && reply.agreed) {
+           config.portfolio.USDC -= (reply.quantity * reply.price);
+           config.portfolio.SYN += reply.quantity;
+           ui.notify("portfolio_updated", { portfolio: config.portfolio });
+        }
+      } catch (err: any) {
+        console.error(`[${config.firmName}] LLM Error:`, err.message);
       }
     });
 
-    // Initiate RFQ
-    const rfq: Message = { type: "rfq", asset: "SYN", quantity: 500000, side: "buy" };
-    console.log(`[${config.firmName}] Sending RFQ:`, JSON.stringify(rfq));
-    ui.notify("message_sent", { message: rfq });
-    channel.send(rfq);
+    // Wait for the UI to send a 'start' command before initiating the RFQ
+    ui.onMessage(async (msg: any) => {
+      if (msg.type === "start") {
+        console.log(`[${config.firmName}] Start signal received from UI. Initiating negotiation.`);
+        ui.notify("status", { message: "Autonomous negotiation triggered..." });
+        
+        const initialPrompt = "Generate the initial Request for Quote (RFQ) to buy 500000 SYN.";
+        history.push({ role: "user", content: initialPrompt });
+        
+        try {
+          const { reasoning, message: rfq } = await generateAgentResponse(config.systemPrompt, history, config.portfolio);
+          
+          console.log(`[${config.firmName}] Reasoning: ${reasoning}`);
+          ui.notify("reasoning", { text: reasoning });
+          
+          console.log(`[${config.firmName}] Sending RFQ:`, JSON.stringify(rfq));
+          ui.notify("message_sent", { message: rfq });
+          channel.send(rfq);
+          history.push({ role: "assistant", content: JSON.stringify(rfq) });
+        } catch (err: any) {
+           console.error(`[${config.firmName}] Failed to generate RFQ:`, err.message);
+        }
+      }
+    });
 
-    console.log(`[${config.firmName}] Interaction complete. Dashboard remains live.`);
+    console.log(`[${config.firmName}] Connected. Waiting for user to press Start on dashboard...`);
     // Keep alive for demo inspection
     await new Promise(() => {}); 
   } catch (err: any) {

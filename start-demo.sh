@@ -2,6 +2,7 @@
 
 # Kill any existing demo processes
 pkill -f ts-node || true
+pkill -f vite || true
 
 # Clean up old session files
 rm -f .tmp/registry.json .tmp/signaling.json
@@ -10,14 +11,19 @@ echo "{}" > .tmp/registry.json
 echo "{}" > .tmp/signaling.json
 
 echo "Starting Meridian Trading (Agent B)..."
-cd demo && npm run agent-b > agent-b.log 2>&1 &
+(cd demo && npm run agent-b > agent-b.log 2>&1) &
 B_PID=$!
 
-echo "Waiting for Agent B to register..."
+echo "Starting React Frontend (Web)..."
+(cd web && npm run dev > web.log 2>&1) &
+WEB_PID=$!
+
+echo "Waiting for backend services to register..."
 sleep 3
 
 echo "Starting Apex Capital (Agent A)..."
-cd demo && npm run agent-a
+(cd demo && npm run agent-a)
 
 # Cleanup on exit
 kill $B_PID
+kill $WEB_PID
