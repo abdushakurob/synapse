@@ -87,9 +87,10 @@ program
 program
   .command("export-key")
   .description("Export Base58 secret key for cloud deployment")
-  .action(async () => {
+  .option("-f, --file <path>", "Direct path to a wallet JSON file")
+  .action(async (options) => {
     try {
-      await exportKey(program.opts() as any);
+      await exportKey({ ...program.opts(), ...options } as any);
     } catch (err: any) {
       console.error(`[CLI] Export failed: ${err.message}`);
       process.exit(1);
