@@ -11,7 +11,7 @@
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "paths": {
-      "@synapse/sdk": ["../sdk/src/index"]
+      "@synapse-io/sdk": ["../sdk/src/index"]
     }
   },
   "include": ["**/*"],

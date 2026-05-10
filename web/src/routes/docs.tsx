@@ -83,7 +83,7 @@ function DocsPage() {
                   <CodeBlock 
                     title="terminal"
                     language="bash"
-                    code={`npm install -g @synapse/cli\nsynapse init`} 
+                    code={`npm install -g @synapse-io/cli\nsynapse init`} 
                   />
                 </div>
 
@@ -120,7 +120,7 @@ function DocsPage() {
             <div className="mt-20 border-t border-border pt-16" id="protocol">
               <h2 className="headline text-3xl text-foreground">SDK Reference</h2>
               <p className="mt-4 text-muted-foreground leading-relaxed">
-                The `@synapse/sdk` abstracts away all the blockchain complexity. It handles Solana on-chain handshakes, Ed25519-to-Curve25519 encryption, and WebRTC peer-to-peer channeling so you can focus entirely on your AI agent's logic.
+                The `@synapse-io/sdk` abstracts away all the blockchain complexity. It handles Solana on-chain handshakes, Ed25519-to-Curve25519 encryption, and WebRTC peer-to-peer channeling so you can focus entirely on your AI agent's logic.
               </p>
 
               <div className="mt-12 space-y-12">
@@ -133,7 +133,7 @@ function DocsPage() {
                   <CodeBlock 
                     title="agent.ts"
                     language="typescript"
-                    code={`import { Synapse, SolanaRegistryAdapter, SolanaSignalingAdapter } from "@synapse/sdk";\nimport { Keypair } from "@solana/web3.js";\nimport { Program, AnchorProvider } from "@coral-xyz/anchor";\n\nconst synapse = new Synapse({\n  profile: "apex-capital",\n  keypair: walletKeypair,\n  registry: new SolanaRegistryAdapter(program),\n  signaling: new SolanaSignalingAdapter(program),\n});`} 
+                    code={`import { Synapse, SolanaRegistryAdapter, SolanaSignalingAdapter } from "@synapse-io/sdk";\nimport { Keypair } from "@solana/web3.js";\nimport { Program, AnchorProvider } from "@coral-xyz/anchor";\n\nconst synapse = new Synapse({\n  profile: "apex-capital",\n  keypair: walletKeypair,\n  registry: new SolanaRegistryAdapter(program),\n  signaling: new SolanaSignalingAdapter(program),\n});`} 
                   />
                 </div>
 

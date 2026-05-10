@@ -1,11 +1,11 @@
 import { Connection, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import * as fs from "fs";
-import * as path from "path";
+import { getWalletPath } from "./utils";
 
 const RPC_URL = "https://api.devnet.solana.com";
 
 export async function airdrop() {
-  const walletPath = path.resolve(__dirname, "../../dev-wallet.json");
+  const walletPath = getWalletPath();
   if (!fs.existsSync(walletPath)) {
     console.error(`[CLI] dev-wallet.json not found. Run 'synapse init' first.`);
     process.exit(1);

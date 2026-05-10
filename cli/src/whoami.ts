@@ -1,13 +1,13 @@
 import { Connection, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { Program, AnchorProvider, Wallet } from "@coral-xyz/anchor";
-import idl from "../../sdk/src/idl.json";
+import { IDL } from "@synapse-io/sdk";
 import * as fs from "fs";
-import * as path from "path";
+import { getWalletPath } from "./utils";
 
 const RPC_URL = "https://api.devnet.solana.com";
 
 export async function whoami() {
-  const walletPath = path.resolve(__dirname, "../../dev-wallet.json");
+  const walletPath = getWalletPath();
   if (!fs.existsSync(walletPath)) {
     console.error(`[CLI] dev-wallet.json not found. Run 'synapse init' first.`);
     process.exit(1);
@@ -20,7 +20,7 @@ export async function whoami() {
   const provider = new AnchorProvider(connection, new Wallet(keypair), {
     commitment: "confirmed",
   });
-  const program = new Program(idl as any, provider as any);
+  const program = new Program(IDL as any, provider as any);
 
   const bal = await connection.getBalance(keypair.publicKey);
   

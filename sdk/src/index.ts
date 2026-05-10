@@ -222,3 +222,4 @@ export { InMemorySignalingAdapter, SolanaSignalingAdapter, SessionRecord } from 
 export { FileRegistryAdapter, FileSignalingAdapter } from "./file-adapters";
 export { SessionManager, ManagedSession } from "./session-manager";
 export { completeConnection, createAnswer, createOffer } from "./webrtc";
+export { default as IDL } from "./idl.json";

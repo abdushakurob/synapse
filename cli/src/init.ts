@@ -1,9 +1,9 @@
 import { Keypair } from "@solana/web3.js";
 import * as fs from "fs";
-import * as path from "path";
+import { getWalletPath } from "./utils";
 
 export async function init() {
-  const walletPath = path.resolve(__dirname, "../../dev-wallet.json");
+  const walletPath = getWalletPath();
   if (fs.existsSync(walletPath)) {
     const secret = JSON.parse(fs.readFileSync(walletPath, "utf-8"));
     const keypair = Keypair.fromSecretKey(Uint8Array.from(secret));

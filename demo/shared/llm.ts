@@ -63,13 +63,12 @@ export async function generateAgentResponse(
     // Remove boilerplate reasoning if it's too short or generic
     if (reasoning.length < 5) reasoning = "Analyzing counterparty request and optimizing trade strategy...";
     jsonString = content.substring(jsonStartIndex);
-  } else if (jsonStartIndex === -1) {
-    // If no JSON, maybe the whole thing is reasoning? 
-    // Or maybe it's just JSON without reasoning.
-    if (content.trim().startsWith("{")) {
+  } else {
+    // If JSON starts at 0 or no JSON found
+    if (jsonStartIndex === 0 || content.trim().startsWith("{")) {
        reasoning = "Executing trade logic based on autonomous firm strategy.";
        jsonString = content;
-    } else {
+    } else if (jsonStartIndex === -1) {
        throw new Error("No JSON found in LLM response.");
     }
   }

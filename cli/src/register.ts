@@ -1,14 +1,13 @@
 import { Keypair, Connection } from "@solana/web3.js";
 import { Program, AnchorProvider, Wallet } from "@coral-xyz/anchor";
-import { Synapse, SolanaRegistryAdapter, SolanaSignalingAdapter } from "@synapse/sdk";
-import idl from "../../sdk/src/idl.json";
+import { Synapse, SolanaRegistryAdapter, SolanaSignalingAdapter, IDL } from "@synapse-io/sdk";
 import * as fs from "fs";
-import * as path from "path";
+import { getWalletPath } from "./utils";
 
 const RPC_URL = "https://api.devnet.solana.com";
 
 export async function register(alias: string) {
-  const walletPath = path.resolve(__dirname, "../../dev-wallet.json");
+  const walletPath = getWalletPath();
   if (!fs.existsSync(walletPath)) {
     throw new Error(`dev-wallet.json not found. Run 'synapse init' first.`);
   }
@@ -20,7 +19,7 @@ export async function register(alias: string) {
   const provider = new AnchorProvider(connection, new Wallet(keypair), {
     commitment: "confirmed",
   });
-  const program = new Program(idl as any, provider as any);
+  const program = new Program(IDL as any, provider as any);
 
   const synapse = new Synapse({
     profile: "cli",

@@ -17,10 +17,11 @@ export class FileRegistryAdapter implements RegistryAdapter {
     return JSON.parse(readFileSync(this.filePath, "utf8"));
   }
 
-  async register(alias: string, pubkey: PublicKey): Promise<void> {
+  async register(alias: string, pubkey: PublicKey): Promise<string> {
     const data = this.read();
     data[alias] = pubkey.toBase58();
     writeFileSync(this.filePath, JSON.stringify(data, null, 2));
+    return "local_file_sig_" + Math.random().toString(36).substring(7);
   }
 
   async resolve(alias: string): Promise<PublicKey> {
@@ -49,7 +50,7 @@ export class FileSignalingAdapter implements SignalingAdapter {
     writeFileSync(this.filePath, JSON.stringify(data, null, 2));
   }
 
-  async createSession(initiator: PublicKey, responder: PublicKey, encryptedOffer: Uint8Array): Promise<SessionRecord> {
+  async createSession(initiator: PublicKey, responder: PublicKey, encryptedOffer: Uint8Array): Promise<{ record: SessionRecord; signature: string }> {
     const createdAt = Date.now();
     const [sessionPDA] = PublicKey.findProgramAddressSync(
       [Buffer.from("session"), initiator.toBuffer(), responder.toBuffer(), Buffer.from(createdAt.toString())],
@@ -69,16 +70,17 @@ export class FileSignalingAdapter implements SignalingAdapter {
     const data = this.read();
     data[sessionPDA.toBase58()] = record;
     this.write(data);
-    return record;
+    return { record, signature: "local_file_sig_" + Math.random().toString(36).substring(7) };
   }
 
-  async respondToSession(sessionPDA: PublicKey, encryptedAnswer: Uint8Array): Promise<void> {
+  async respondToSession(sessionPDA: PublicKey, encryptedAnswer: Uint8Array): Promise<string> {
     const data = this.read();
     const record = data[sessionPDA.toBase58()];
     if (!record) throw new Error("Session not found");
     record.encryptedAnswer = Array.from(encryptedAnswer);
     record.status = "active";
     this.write(data);
+    return "local_file_sig_" + Math.random().toString(36).substring(7);
   }
 
   async waitForAnswer(sessionPDA: PublicKey, timeoutMs = 30000): Promise<Uint8Array> {

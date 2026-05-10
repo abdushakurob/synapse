@@ -1,5 +1,19 @@
 import Peer from "simple-peer";
-import wrtc from "wrtc";
+
+// wrtc is a native dependency that can fail to build on some systems.
+// We load it lazily and throw a helpful error only if it's actually needed.
+function getWrtc() {
+  try {
+    return require("wrtc");
+  } catch (e) {
+    throw new Error(
+      "[Synapse SDK] The 'wrtc' dependency is missing. " +
+      "This is a native module required for P2P connections in Node.js. " +
+      "Please install it manually or ensure your system has build-essential/python3 installed. " +
+      "Note: This is NOT required for CLI commands like 'whoami' or 'balance'."
+    );
+  }
+}
 
 export interface ConnectionData {
   sdp: string;
@@ -21,12 +35,13 @@ const ICE_CONFIG: RTCConfiguration = {
  * Returns the peer instance and the offer data (SDP).
  */
 export async function createOffer(): Promise<WebRTCConnection> {
+  const wrtc = getWrtc();
   return new Promise((resolve, reject) => {
     const peer = new Peer({
       initiator: true,
       trickle: false, // We gather all ICE candidates and send them in one go in the SDP
       config: ICE_CONFIG,
-      wrtc: wrtc,
+      wrtc,
     });
 
     peer.on("signal", (data) => {
@@ -52,12 +67,13 @@ export async function createOffer(): Promise<WebRTCConnection> {
  * Returns the peer instance and the answer data (SDP).
  */
 export async function createAnswer(offerData: ConnectionData): Promise<WebRTCConnection> {
+  const wrtc = getWrtc();
   return new Promise((resolve, reject) => {
     const peer = new Peer({
       initiator: false,
       trickle: false,
       config: ICE_CONFIG,
-      wrtc: wrtc,
+      wrtc,
     });
 
     peer.signal(offerData);

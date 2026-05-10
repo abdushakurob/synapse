@@ -2,7 +2,7 @@ import {
   Synapse,
   SolanaRegistryAdapter,
   SolanaSignalingAdapter,
-} from "@synapse/sdk";
+} from "@synapse-io/sdk";
 import { Program, AnchorProvider, Wallet } from "@coral-xyz/anchor";
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
 import idl from "../../sdk/src/idl.json";
