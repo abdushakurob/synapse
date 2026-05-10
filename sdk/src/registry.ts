@@ -1,4 +1,6 @@
 import { PublicKey } from "@solana/web3.js";
+import { Program, Idl } from "@coral-xyz/anchor";
+import idl from "./idl.json";
 
 export class AgentNotFoundError extends Error {
   constructor(alias: string) {
@@ -39,5 +41,48 @@ export class InMemoryRegistryAdapter implements RegistryAdapter {
       throw new AgentNotFoundError(alias);
     }
     return value;
+  }
+}
+
+/**
+ * On-chain registry adapter using Solana PDAs.
+ */
+export class SolanaRegistryAdapter implements RegistryAdapter {
+  constructor(private program: Program<any>) {}
+
+  private async getPDA(alias: string): Promise<PublicKey> {
+    const [pda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("agent"), Buffer.from(alias)],
+      this.program.programId
+    );
+    return pda;
+  }
+
+  async register(alias: string): Promise<void> {
+    try {
+      const pda = await this.getPDA(alias);
+      await (this.program.methods as any)
+        .registerAgent(alias)
+        .accounts({
+          agentRegistry: pda,
+          owner: this.program.provider.publicKey,
+        })
+        .rpc();
+    } catch (err: any) {
+      if (err.message.includes("already in use")) {
+        throw new AliasTakenError(alias);
+      }
+      throw err;
+    }
+  }
+
+  async resolve(alias: string): Promise<PublicKey> {
+    try {
+      const pda = await this.getPDA(alias);
+      const account = await (this.program.account as any).agentRegistry.fetch(pda);
+      return (account as any).owner;
+    } catch (err: any) {
+      throw new AgentNotFoundError(alias);
+    }
   }
 }

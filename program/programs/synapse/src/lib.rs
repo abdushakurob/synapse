@@ -18,9 +18,10 @@ pub mod synapse {
         Ok(())
     }
 
+    #[allow(unused_variables)]
     pub fn create_session(
         ctx: Context<CreateSession>,
-        timestamp: i64,
+        timestamp: u64,
         encrypted_offer: Vec<u8>,
     ) -> Result<()> {
         let session = &mut ctx.accounts.session;
@@ -29,14 +30,17 @@ pub mod synapse {
         session.encrypted_offer = encrypted_offer;
         session.encrypted_answer = None;
         session.status = SessionStatus::Pending;
-        session.created_at = Clock::get()?.unix_timestamp;
-        session.expires_at = session.created_at + 300; // 5 minutes
+        session.created_at = timestamp as i64;
+        session.expires_at = (timestamp + 300) as i64; // 5 mins TTL
         session.bump = ctx.bumps.session;
 
         Ok(())
     }
 
-    pub fn respond_session(ctx: Context<RespondSession>, encrypted_answer: Vec<u8>) -> Result<()> {
+    pub fn respond_session(
+        ctx: Context<RespondSession>, 
+        encrypted_answer: Vec<u8>,
+    ) -> Result<()> {
         let session = &mut ctx.accounts.session;
         
         require!(
@@ -93,7 +97,7 @@ pub struct CreateSession<'info> {
     #[account(
         init,
         payer = initiator,
-        space = 8 + Session::MAX_SIZE,
+        space = 8 + 4000, // 8 discriminator + 4000 space for WebRTC payloads
         seeds = [b"session", initiator.key().as_ref(), responder.key().as_ref(), &timestamp.to_le_bytes()],
         bump
     )]
@@ -154,8 +158,8 @@ impl AgentRegistry {
 pub struct Session {
     pub initiator: Pubkey, // 32
     pub responder: Pubkey, // 32
-    pub encrypted_offer: Vec<u8>, // 4 + ~128
-    pub encrypted_answer: Option<Vec<u8>>, // 1 + 4 + ~128
+    pub encrypted_offer: Vec<u8>, // 4 + ~1500
+    pub encrypted_answer: Option<Vec<u8>>, // 1 + 4 + ~1500
     pub status: SessionStatus, // 1
     pub created_at: i64, // 8
     pub expires_at: i64, // 8
@@ -163,8 +167,7 @@ pub struct Session {
 }
 
 impl Session {
-    // 32 + 32 + (4 + 200) + (1 + 4 + 200) + 1 + 8 + 8 + 1 = 491, safe 500
-    pub const MAX_SIZE: usize = 500;
+    pub const MAX_SIZE: usize = 4000;
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Eq)]

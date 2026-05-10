@@ -1,8 +1,10 @@
+import zlib from "zlib";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import { Channel } from "./channel";
 import { decrypt, ed25519SecretToCurve25519, ed25519ToCurve25519, encrypt } from "./crypto";
-import { InMemoryRegistryAdapter, RegistryAdapter } from "./registry";
-import { InMemorySignalingAdapter, SessionRecord, SignalingAdapter } from "./signaling";
+import { InMemoryRegistryAdapter, RegistryAdapter, SolanaRegistryAdapter } from "./registry";
+import { InMemorySignalingAdapter, SessionRecord, SignalingAdapter, SolanaSignalingAdapter } from "./signaling";
+import { FileRegistryAdapter, FileSignalingAdapter } from "./file-adapters";
 import { ManagedSession, SessionManager } from "./session-manager";
 import { completeConnection, ConnectionData, createAnswer, createOffer } from "./webrtc";
 
@@ -22,6 +24,7 @@ interface SynapseOptions {
 }
 
 type ConnectionHandler = (channel: Channel, from: string) => void | Promise<void>;
+type RequestHandler = (request: { sessionPDA: PublicKey, from: string }) => void | Promise<void>;
 
 export class Synapse {
   readonly profile: string;
@@ -31,6 +34,7 @@ export class Synapse {
   private readonly registry: RegistryAdapter;
   private readonly signaling: SignalingAdapter;
   private connectionHandler?: ConnectionHandler;
+  private requestHandler?: RequestHandler;
 
   constructor(options: SynapseOptions) {
     this.profile = options.profile;
@@ -40,14 +44,6 @@ export class Synapse {
 
     this.sessions = new SessionManager({
       maxConcurrent: options.maxConcurrent ?? 10,
-      processInbound: async (queued) => {
-        // Build a temporary record to satisfy acceptInbound
-        // In a real setup, we would fetch the full record from signaling
-        const record = await this.signaling.getSession(queued.sessionPDA);
-        if (!record) return null;
-        const channel = await this.acceptInbound(record);
-        return this.sessions.get(record.sessionPDA.toBase58()) || null;
-      },
     });
   }
 
@@ -57,6 +53,61 @@ export class Synapse {
 
   onConnection(handler: ConnectionHandler): void {
     this.connectionHandler = handler;
+  }
+
+  onRequest(handler: RequestHandler): void {
+    this.requestHandler = handler;
+    // For local testing or real blockchain events, start listening
+    this.startPolling();
+  }
+
+  private async notifyRequest(sessionPDA: PublicKey, encryptedOffer: Uint8Array) {
+    await this.sessions.handleInbound(sessionPDA, encryptedOffer);
+    if (this.requestHandler) {
+      const record = await this.signaling.getSession(sessionPDA);
+      if (record) {
+        await this.requestHandler({ sessionPDA, from: record.initiator.toBase58() });
+      }
+    }
+  }
+
+  private async startPolling() {
+    console.log(`[${this.profile}] Starting session listener...`);
+
+    // Use push-based notifications (WebSockets) if available
+    if (this.signaling.onNewSession) {
+      this.signaling.onNewSession(this.keypair.publicKey, (session) => {
+        if (!this.sessions.get(session.sessionPDA.toBase58()) && !this.sessions.getQueue().some(q => q.sessionPDA.toBase58() === session.sessionPDA.toBase58())) {
+          this.notifyRequest(session.sessionPDA, session.encryptedOffer);
+        }
+      });
+
+      // Catch-up check for sessions that arrived before subscription
+      const initial = await this.signaling.listSessions(this.keypair.publicKey);
+      for (const session of initial) {
+        if (!this.sessions.get(session.sessionPDA.toBase58()) && !this.sessions.getQueue().some(q => q.sessionPDA.toBase58() === session.sessionPDA.toBase58())) {
+          await this.notifyRequest(session.sessionPDA, session.encryptedOffer);
+        }
+      }
+      return;
+    }
+
+    // Fallback to polling for simpler adapters
+    while (true) {
+      try {
+        const sessions = await (this.signaling as any).listSessions?.(this.keypair.publicKey);
+        if (sessions) {
+          for (const session of sessions) {
+            if (!this.sessions.get(session.sessionPDA.toBase58()) && !this.sessions.getQueue().some(q => q.sessionPDA.toBase58() === session.sessionPDA.toBase58())) {
+               await this.notifyRequest(session.sessionPDA, session.encryptedOffer);
+            }
+          }
+        }
+      } catch (err) {
+        // Silently continue
+      }
+      await new Promise(r => setTimeout(r, 5000));
+    }
   }
 
   async connect(alias: string): Promise<Channel> {
@@ -72,9 +123,9 @@ export class Synapse {
 
     let encryptedAnswer: Uint8Array;
     try {
-      encryptedAnswer = await this.signaling.waitForAnswer(session.sessionPDA);
+      encryptedAnswer = await this.signaling.waitForAnswer(session.sessionPDA, 60000);
     } catch {
-      throw new ConnectionTimeoutError("[SDK] Timed out waiting for responder answer");
+      throw new ConnectionTimeoutError("[SDK] Timed out waiting for responder answer (60s)");
     }
 
     const answer = decryptConnectionData(encryptedAnswer, this.keypair, responder);
@@ -85,9 +136,19 @@ export class Synapse {
   }
 
   /**
-   * Handles an inbound session record. This is the entrypoint used by listeners.
+   * Accepts a pending inbound session request and opens the channel.
    */
-  async acceptInbound(record: SessionRecord): Promise<Channel> {
+  async acceptSession(sessionPDAStr: string): Promise<Channel> {
+    const queued = this.sessions.dequeue(sessionPDAStr);
+    if (!queued) {
+      throw new Error(`[SDK] Session ${sessionPDAStr} not found in pending queue.`);
+    }
+
+    const record = await this.signaling.getSession(queued.sessionPDA);
+    if (!record) {
+      throw new Error(`[SDK] Session ${sessionPDAStr} not found on-chain.`);
+    }
+
     const initiator = record.initiator;
     const offerData = decryptConnectionData(record.encryptedOffer, this.keypair, initiator);
     const answer = await createAnswer(offerData);
@@ -95,22 +156,24 @@ export class Synapse {
     await this.signaling.respondToSession(record.sessionPDA, encryptedAnswer);
     const channel = new Channel(answer.peer);
 
-    const managed: ManagedSession = {
-      sessionPDA: record.sessionPDA.toBase58(),
-      channel,
-      direction: "inbound",
-      remotePubkey: initiator.toBase58(),
-      openedAt: Date.now(),
-      status: "active",
-    };
-
-    await this.sessions.registerOutbound(record.sessionPDA, channel, initiator.toBase58());
+    await this.sessions.registerInbound(record.sessionPDA, channel, initiator.toBase58());
     if (this.connectionHandler) {
       await this.connectionHandler(channel, initiator.toBase58());
     }
-    // Keep managed for potential future custom logic.
-    void managed;
     return channel;
+  }
+
+  /**
+   * Rejects a pending inbound session request.
+   */
+  async rejectSession(sessionPDAStr: string): Promise<void> {
+    const queued = this.sessions.dequeue(sessionPDAStr);
+    if (!queued) {
+      return;
+    }
+    // We could call expire_session or close_session on-chain if we wanted, 
+    // but simply ignoring it lets it expire or we can implement explicit reject later.
+    console.log(`[${this.profile}] Rejected session ${sessionPDAStr}`);
   }
 }
 
@@ -121,8 +184,9 @@ function encryptConnectionData(
 ): Uint8Array {
   const senderCurveSecret = ed25519SecretToCurve25519(sender.secretKey.slice(0, 32));
   const recipientCurvePublic = ed25519ToCurve25519(recipient.toBytes());
-  const payload = new TextEncoder().encode(JSON.stringify(data));
-  return encrypt(payload, senderCurveSecret, recipientCurvePublic);
+  const payloadStr = JSON.stringify(data);
+  const compressed = zlib.deflateSync(Buffer.from(payloadStr));
+  return encrypt(compressed, senderCurveSecret, recipientCurvePublic);
 }
 
 function decryptConnectionData(
@@ -133,13 +197,15 @@ function decryptConnectionData(
   const recipientCurveSecret = ed25519SecretToCurve25519(recipient.secretKey.slice(0, 32));
   const senderCurvePublic = ed25519ToCurve25519(sender.toBytes());
   const decrypted = decrypt(encrypted, recipientCurveSecret, senderCurvePublic);
-  const parsed = JSON.parse(new TextDecoder().decode(decrypted)) as ConnectionData;
+  const decompressed = zlib.inflateSync(Buffer.from(decrypted));
+  const parsed = JSON.parse(decompressed.toString("utf-8")) as ConnectionData;
   return parsed;
 }
 
 export { Channel } from "./channel";
 export { generateKeypair, loadKeypair, saveKeypair } from "./keypair";
-export { AgentNotFoundError, AliasTakenError, InMemoryRegistryAdapter } from "./registry";
-export { InMemorySignalingAdapter } from "./signaling";
-export { SessionManager } from "./session-manager";
+export { AgentNotFoundError, AliasTakenError, InMemoryRegistryAdapter, SolanaRegistryAdapter } from "./registry";
+export { InMemorySignalingAdapter, SolanaSignalingAdapter, SessionRecord } from "./signaling";
+export { FileRegistryAdapter, FileSignalingAdapter } from "./file-adapters";
+export { SessionManager, ManagedSession } from "./session-manager";
 export { completeConnection, createAnswer, createOffer } from "./webrtc";

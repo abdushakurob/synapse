@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apex Capital | Autonomous Trading Agent</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #0066FF;
+            --bg: #0A0B10;
+            --surface: #161821;
+            --text: #FFFFFF;
+            --text-dim: #8A8D98;
+            --border: rgba(255, 255, 255, 0.1);
+            --success: #00C853;
+            --accent: #0066FF;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            grid-template-rows: 80px 1fr;
+            height: 100vh;
+        }
+
+        header {
+            grid-column: 1 / -1;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 32px;
+            border-bottom: 1px solid var(--border);
+            background: rgba(22, 24, 33, 0.8);
+            backdrop-filter: blur(10px);
+            z-index: 100;
+        }
+
+        .logo-section {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+            background: var(--primary);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 20px;
+        }
+
+        .logo-text h1 {
+            font-size: 18px;
+            font-weight: 600;
+            letter-spacing: 1px;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            background: rgba(0, 200, 83, 0.1);
+            border-radius: 20px;
+            color: var(--success);
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--success);
+            border-radius: 50%;
+            box-shadow: 0 0 10px var(--success);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        sidebar {
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 32px;
+        }
+
+        .sidebar-section h2 {
+            font-size: 12px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 16px;
+        }
+
+        .portfolio-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .asset-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .asset-label {
+            font-size: 14px;
+            color: var(--text-dim);
+        }
+
+        .asset-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 500;
+        }
+
+        .session-info {
+            font-size: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .info-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .info-label {
+            color: var(--text-dim);
+            font-size: 12px;
+        }
+
+        .info-value {
+            color: var(--text);
+            word-break: break-all;
+        }
+
+        main {
+            padding: 32px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            overflow-y: auto;
+        }
+
+        .log-container {
+            flex: 1;
+            background: rgba(22, 24, 33, 0.5);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            position: relative;
+        }
+
+        .log-entry {
+            display: flex;
+            gap: 16px;
+            font-size: 14px;
+            line-height: 1.5;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .timestamp {
+            color: var(--text-dim);
+            font-family: 'JetBrains Mono', monospace;
+            min-width: 80px;
+        }
+
+        .entry-content {
+            flex: 1;
+        }
+
+        .entry-content.sent {
+            color: var(--primary);
+        }
+
+        .entry-content.received {
+            color: var(--success);
+        }
+
+        .execution-banner {
+            background: linear-gradient(90deg, rgba(0, 102, 255, 0.2) 0%, rgba(0, 200, 83, 0.2) 100%);
+            border: 1px solid var(--primary);
+            border-radius: 12px;
+            padding: 20px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            animation: slideIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes slideIn {
+            from { transform: scale(0.9); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        .execution-banner h3 {
+            font-size: 18px;
+            margin-bottom: 4px;
+        }
+
+        .execution-banner p {
+            color: var(--text-dim);
+            font-size: 14px;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <header>
+            <div class="logo-section">
+                <div class="logo-icon">AC</div>
+                <div class="logo-text">
+                    <h1>APEX CAPITAL</h1>
+                    <p style="font-size: 12px; color: var(--text-dim);">Autonomous Trading Agent</p>
+                </div>
+            </div>
+            <div class="status-badge">
+                <div class="status-dot"></div>
+                Agent Live
+            </div>
+        </header>
+
+        <sidebar>
+            <div class="sidebar-section">
+                <h2>Portfolio</h2>
+                <div class="portfolio-card">
+                    <div class="asset-row">
+                        <span class="asset-label">USDC</span>
+                        <span class="asset-value" id="val-usdc">$500,000.00</span>
+                    </div>
+                    <div class="asset-row">
+                        <span class="asset-label">SYN</span>
+                        <span class="asset-value" id="val-syn">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <h2>Active Session</h2>
+                <div class="session-info">
+                    <div class="info-item">
+                        <span class="info-label">Connected to</span>
+                        <span class="info-value" id="session-remote">Waiting...</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Session PDA</span>
+                        <span class="info-value" id="session-pda">None</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Latency</span>
+                        <span class="info-value">38ms</span>
+                    </div>
+                </div>
+            </div>
+        </sidebar>
+
+        <main>
+            <div id="execution-banner" class="execution-banner">
+                <div>
+                    <h3>✓ TRADE EXECUTED</h3>
+                    <p id="execution-text">Bought 500,000 SYN @ $0.455</p>
+                </div>
+            </div>
+
+            <div class="log-container" id="log-container">
+                <!-- Logs will be injected here -->
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const logContainer = document.getElementById('log-container');
+        const usdcVal = document.getElementById('val-usdc');
+        const synVal = document.getElementById('val-syn');
+        const sessionRemote = document.getElementById('session-remote');
+        const sessionPda = document.getElementById('session-pda');
+        const executionBanner = document.getElementById('execution-banner');
+        const executionText = document.getElementById('execution-text');
+
+        function addLog(message, type) {
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            const now = new Date();
+            const timeStr = now.getHours().toString().padStart(2, '0') + ':' + 
+                          now.getMinutes().toString().padStart(2, '0') + ':' + 
+                          now.getSeconds().toString().padStart(2, '0');
+            
+            entry.innerHTML = `
+                <div class="timestamp">[${timeStr}]</div>
+                <div class="entry-content ${type}">${message}</div>
+            `;
+            logContainer.prepend(entry);
+        }
+
+        const ws = new WebSocket('ws://localhost:3001');
+
+        ws.onopen = () => {
+            addLog('WebSocket Connection established.', '');
+        };
+
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            
+            switch (data.event) {
+                case 'session_opened':
+                    sessionRemote.innerText = data.remoteFirm;
+                    sessionPda.innerText = data.sessionPDA;
+                    addLog(`Connection established with ${data.remoteFirm}`, '');
+                    break;
+
+                case 'message_sent':
+                    handleMessage(data.message, 'sent');
+                    break;
+
+                case 'message_received':
+                    handleMessage(data.message, 'received');
+                    break;
+
+                case 'portfolio_updated':
+                    usdcVal.innerText = '$' + data.portfolio.USDC.toLocaleString(undefined, {minimumFractionDigits: 2});
+                    synVal.innerText = data.portfolio.SYN.toLocaleString();
+                    break;
+            }
+        };
+
+        function handleMessage(msg, direction) {
+            const prefix = direction === 'sent' ? '→' : '←';
+            let text = '';
+
+            switch (msg.type) {
+                case 'rfq':
+                    text = `${prefix} RFQ sent: ${msg.side.toUpperCase()} ${msg.quantity.toLocaleString()} ${msg.asset}`;
+                    break;
+                case 'quote':
+                    text = `${prefix} Quote received: $${msg.price} / ${msg.asset}`;
+                    break;
+                case 'counter':
+                    text = `${prefix} Counter ${direction === 'sent' ? 'sent' : 'received'}: $${msg.price}`;
+                    break;
+                case 'execution':
+                    text = `${prefix} ACCEPTED — executing at $${msg.price}`;
+                    executionBanner.style.display = 'flex';
+                    executionText.innerText = `Bought ${msg.quantity.toLocaleString()} ${msg.asset} @ $${msg.price}`;
+                    break;
+                case 'reject':
+                    text = `${prefix} Negotiation rejected: ${msg.reason}`;
+                    break;
+                case 'status':
+                    text = `i Status: ${msg.message}`;
+                    break;
+            }
+
+            addLog(text, direction);
+        }
+    </script>
+</body>
+</html>

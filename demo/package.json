@@ -1,0 +1,24 @@
+{
+  "name": "@synapse/demo",
+  "version": "1.0.0",
+  "description": "Synapse trading demo agents",
+  "scripts": {
+    "agent-a": "TS_NODE_FILES=true ts-node agent-a/index.ts",
+    "agent-b": "TS_NODE_FILES=true ts-node agent-b/index.ts",
+    "bridge": "TS_NODE_FILES=true ts-node shared/ws-bridge.ts"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.30.1",
+    "@synapse/sdk": "file:../sdk",
+    "dotenv": "^16.3.1",
+    "openai": "^4.0.0",
+    "ws": "^8.0.0"
+  },
+  "devDependencies": {
+    "@solana/web3.js": "^1.98.4",
+    "@types/node": "^20.19.40",
+    "@types/ws": "^8.5.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}

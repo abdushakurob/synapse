@@ -30,22 +30,14 @@ async function runTest() {
     });
   });
 
-  // Since we are using InMemory, we need to simulate the "polling" or "event"
-  // that triggers acceptInbound on Agent B when Agent A creates a session.
-  // In a real Solana setup, this would be a watcher on the Session PDAs.
-  const originalCreateSession = (synapseA as any).signaling.createSession;
-  (synapseA as any).signaling.createSession = async (...args: any[]) => {
-    const record = await originalCreateSession.apply((synapseA as any).signaling, args);
-    console.log(`[Test] Signaling: New session created ${record.sessionPDA.toBase58()}`);
-    
-    // Simulate Agent B picking up the session
-    setTimeout(() => {
-      console.log("[Test] Agent B picking up session from signaling...");
-      synapseB.acceptInbound(record).catch(err => console.error("[Test] Agent B accept failed:", err));
-    }, 500);
-
-    return record;
-  };
+  synapseB.onRequest(async (request) => {
+    console.log(`[Test] Agent B received request from ${request.from}. Accepting...`);
+    try {
+      await synapseB.acceptSession(request.sessionPDA.toBase58());
+    } catch (err: any) {
+      console.error("[Test] Agent B accept failed:", err);
+    }
+  });
 
   console.log("[Test] Agent A connecting to Agent B...");
   try {

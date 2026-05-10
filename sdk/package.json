@@ -10,8 +10,10 @@
     "test-session-manager": "TS_NODE_FILES=true ts-node src/test-session-manager.ts"
   },
   "dependencies": {
-    "@coral-xyz/anchor": "^0.29.0",
+    "@coral-xyz/anchor": "^0.30.1",
     "@solana/web3.js": "^1.87.0",
+    "@types/bn.js": "^5.2.0",
+    "bn.js": "^5.2.3",
     "ed2curve": "^0.3.0",
     "simple-peer": "^9.11.1",
     "tweetnacl": "^1.0.3",

@@ -18,7 +18,6 @@ export interface QueuedSession {
 
 interface SessionManagerOptions {
   maxConcurrent?: number;
-  processInbound: (session: QueuedSession) => Promise<ManagedSession | null>;
   isQueuedSessionExpired?: (session: QueuedSession) => Promise<boolean> | boolean;
 }
 
@@ -26,12 +25,10 @@ export class SessionManager {
   private readonly sessions: Map<string, ManagedSession> = new Map();
   private readonly inboundQueue: QueuedSession[] = [];
   private readonly maxConcurrent: number;
-  private readonly processInbound: SessionManagerOptions["processInbound"];
   private readonly isQueuedSessionExpired?: SessionManagerOptions["isQueuedSessionExpired"];
 
-  constructor(options: SessionManagerOptions) {
+  constructor(options: SessionManagerOptions = {}) {
     this.maxConcurrent = options.maxConcurrent ?? 10;
-    this.processInbound = options.processInbound;
     this.isQueuedSessionExpired = options.isQueuedSessionExpired;
   }
 
@@ -42,12 +39,13 @@ export class SessionManager {
       queuedAt: Date.now(),
     };
 
-    if (this.sessions.size >= this.maxConcurrent) {
-      this.inboundQueue.push(queued);
+    // Check if it's already in the queue or active sessions
+    const key = sessionPDA.toBase58();
+    if (this.sessions.has(key) || this.inboundQueue.some(q => q.sessionPDA.toBase58() === key)) {
       return;
     }
 
-    await this.activateInbound(queued);
+    this.inboundQueue.push(queued);
   }
 
   async registerOutbound(
@@ -68,6 +66,24 @@ export class SessionManager {
     this.attachCloseCleanup(managed);
   }
 
+  async registerInbound(
+    sessionPDA: PublicKey | string,
+    channel: Channel,
+    remotePubkey: string,
+  ): Promise<void> {
+    const key = toSessionKey(sessionPDA);
+    const managed: ManagedSession = {
+      sessionPDA: key,
+      channel,
+      direction: "inbound",
+      remotePubkey,
+      openedAt: Date.now(),
+      status: "active",
+    };
+    this.sessions.set(key, managed);
+    this.attachCloseCleanup(managed);
+  }
+
   async remove(sessionPDA: string): Promise<void> {
     const existing = this.sessions.get(sessionPDA);
     if (!existing) {
@@ -75,7 +91,18 @@ export class SessionManager {
     }
     existing.status = "closing";
     this.sessions.delete(sessionPDA);
-    await this.processQueue();
+  }
+
+  getQueue(): QueuedSession[] {
+    return [...this.inboundQueue];
+  }
+
+  dequeue(sessionPDA: string): QueuedSession | undefined {
+    const index = this.inboundQueue.findIndex(q => q.sessionPDA.toBase58() === sessionPDA);
+    if (index !== -1) {
+      return this.inboundQueue.splice(index, 1)[0];
+    }
+    return undefined;
   }
 
   list(): ManagedSession[] {
@@ -86,35 +113,10 @@ export class SessionManager {
     return this.sessions.get(sessionPDA);
   }
 
-  private async activateInbound(queued: QueuedSession): Promise<void> {
-    const managed = await this.processInbound(queued);
-    if (!managed) {
-      return;
-    }
-    this.sessions.set(managed.sessionPDA, managed);
-    this.attachCloseCleanup(managed);
-  }
-
   private attachCloseCleanup(session: ManagedSession): void {
     session.channel.onClose(() => {
       void this.remove(session.sessionPDA);
     });
-  }
-
-  private async processQueue(): Promise<void> {
-    while (this.sessions.size < this.maxConcurrent && this.inboundQueue.length > 0) {
-      const next = this.inboundQueue.shift();
-      if (!next) {
-        return;
-      }
-
-      const expired = this.isQueuedSessionExpired ? await this.isQueuedSessionExpired(next) : false;
-      if (expired) {
-        continue;
-      }
-
-      await this.activateInbound(next);
-    }
   }
 }
 
