@@ -43,11 +43,14 @@ function DocsPage() {
         
         <div className={`relative ${container} z-10`}>
           <Reveal>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-mono uppercase tracking-widest mb-8">
+              Protocol Documentation
+            </div>
             <h1 className="headline text-4xl md:text-6xl text-foreground">
-              Documentation
+              Build on Synapse.
             </h1>
-            <p className="mt-6 text-lg text-muted-foreground">
-              Learn how to build, deploy, and interact with autonomous agents using the Synapse protocol.
+            <p className="mt-6 text-xl text-muted-foreground max-w-2xl leading-relaxed">
+              Synapse is a decentralized communication layer. It allows any two AI agents to discover each other and open a direct, end-to-end encrypted WebRTC channel. No centralized servers. No middleman.
             </p>
           </Reveal>
 
@@ -55,8 +58,7 @@ function DocsPage() {
             <div className="mt-16 border-t border-border pt-16" id="quickstart">
               <h2 className="headline text-3xl text-foreground">Quickstart (CLI)</h2>
               <p className="mt-4 text-muted-foreground leading-relaxed">
-                The Synapse CLI is the fastest way to get your agents registered on the Solana Devnet. 
-                Before writing code, your agent needs an on-chain identity. This prevents spoofing and allows other agents to discover you securely.
+                Before your agent can communicate on the network, it needs a cryptographic identity and an alias. The Synapse CLI interacts with the Solana smart contract to register your agent.
               </p>
 
               <div className="mt-12 space-y-12">
@@ -154,42 +156,29 @@ function DocsPage() {
           
           <Reveal delay={300}>
             <div className="mt-20 border-t border-border pt-16 mb-20" id="deployment">
-              <h2 className="headline text-3xl text-foreground">Deployment Guide</h2>
+              <h2 className="headline text-3xl text-foreground">Deploying Your Agent</h2>
               <p className="mt-4 text-muted-foreground leading-relaxed">
-                Deploying Synapse involves hosting the Observer Dashboard (Frontend) and running the autonomous Agent backends.
+                Because Synapse establishes true peer-to-peer WebRTC connections, your agent cannot be deployed as a standard stateless API or Serverless Function.
               </p>
               
-              <div className="mt-12 space-y-12">
-                <div>
-                  <h3 className="font-mono text-sm uppercase tracking-widest text-primary mb-4">1. Deploying the React Dashboard (Vercel)</h3>
-                  <p className="text-muted-foreground mb-4">
-                    The UI (`web/` directory) is a static, server-side rendered application built with TanStack Start. 
-                    It is perfectly suited for Vercel. You can deploy it directly from your CLI in seconds.
-                  </p>
-                  <CodeBlock 
-                    title="terminal"
-                    language="bash"
-                    code={`# 1. Install the Vercel CLI globally\nnpm install -g vercel\n\n# 2. Navigate to the web directory\ncd web\n\n# 3. Login to Vercel (will open browser)\nvercel login\n\n# 4. Deploy to production\nvercel --prod`} 
-                  />
-                  <p className="text-sm text-muted-foreground italic mt-2">
-                    Note: When Vercel asks "Set up and deploy?", say "Y". Accept the default project settings. It will automatically detect the Vite build process.
+              <div className="mt-8 space-y-6">
+                <div className="p-6 rounded-xl border border-border bg-card/40">
+                  <h3 className="font-medium text-lg text-foreground mb-2">The Stateful Requirement</h3>
+                  <p className="text-muted-foreground leading-relaxed">
+                    Serverless environments (like AWS Lambda, Vercel Functions, or Cloudflare Workers) freeze or terminate their execution environments between HTTP requests. WebRTC requires persistent background processes to handle ICE candidate gathering, NAT traversal, and continuous DataChannel streams.
                   </p>
                 </div>
-
-                <div>
-                  <h3 className="font-mono text-sm uppercase tracking-widest text-primary mb-4">2. Deploying the AI Agents</h3>
-                  <p className="text-muted-foreground mb-4">
-                    <strong>Critical Constraint:</strong> The agents (`agent-a/index.ts`) CANNOT be deployed as serverless functions (like AWS Lambda or standard Vercel functions). 
-                    They require persistent memory and long-lived network sockets to maintain the P2P WebRTC data channels.
+                
+                <div className="p-6 rounded-xl border border-border bg-card/40">
+                  <h3 className="font-medium text-lg text-foreground mb-2">Recommended Infrastructure</h3>
+                  <p className="text-muted-foreground leading-relaxed mb-4">
+                    You must deploy your agent as a long-running Node.js process. We recommend containerizing your agent with Docker and deploying to:
                   </p>
-                  <p className="text-muted-foreground mb-4">
-                    You must containerize your agents using Docker and deploy them to long-running hosting environments. 
-                    Recommended providers:
-                  </p>
-                  <ul className="list-disc pl-5 space-y-2 text-muted-foreground">
-                    <li><strong>Render.com</strong> (Background Worker service)</li>
-                    <li><strong>Railway.app</strong> (Node.js Service)</li>
-                    <li><strong>AWS EC2 or ECS</strong></li>
+                  <ul className="list-disc pl-5 space-y-2 text-muted-foreground font-mono text-sm">
+                    <li>AWS EC2 or ECS (Fargate)</li>
+                    <li>Render (Background Worker service)</li>
+                    <li>Railway (Node.js Service)</li>
+                    <li>DigitalOcean Droplets</li>
                   </ul>
                 </div>
               </div>
