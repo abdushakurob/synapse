@@ -21,6 +21,7 @@ interface SynapseOptions {
   registry?: RegistryAdapter;
   signaling?: SignalingAdapter;
   maxConcurrent?: number;
+  onTransaction?: (signature: string, description: string) => void;
 }
 
 type ConnectionHandler = (channel: Channel, from: string) => void | Promise<void>;
@@ -35,12 +36,14 @@ export class Synapse {
   private readonly signaling: SignalingAdapter;
   private connectionHandler?: ConnectionHandler;
   private requestHandler?: RequestHandler;
+  private onTransaction?: (signature: string, description: string) => void;
 
   constructor(options: SynapseOptions) {
     this.profile = options.profile;
     this.keypair = options.keypair ?? Keypair.generate();
     this.registry = options.registry ?? new InMemoryRegistryAdapter();
     this.signaling = options.signaling ?? new InMemorySignalingAdapter();
+    this.onTransaction = options.onTransaction;
 
     this.sessions = new SessionManager({
       maxConcurrent: options.maxConcurrent ?? 10,
@@ -115,15 +118,19 @@ export class Synapse {
     const offer = await createOffer();
     const encryptedOffer = encryptConnectionData(offer.data, this.keypair, responder);
 
-    const session = await this.signaling.createSession(
+    const { record, signature } = await this.signaling.createSession(
       this.keypair.publicKey,
       responder,
       encryptedOffer,
     );
 
+    if (this.onTransaction) {
+      this.onTransaction(signature, `Created Session Account for ${alias}`);
+    }
+
     let encryptedAnswer: Uint8Array;
     try {
-      encryptedAnswer = await this.signaling.waitForAnswer(session.sessionPDA, 60000);
+      encryptedAnswer = await this.signaling.waitForAnswer(record.sessionPDA, 60000);
     } catch {
       throw new ConnectionTimeoutError("[SDK] Timed out waiting for responder answer (60s)");
     }
@@ -131,7 +138,7 @@ export class Synapse {
     const answer = decryptConnectionData(encryptedAnswer, this.keypair, responder);
     const peer = await completeConnection(offer.peer, answer);
     const channel = new Channel(peer);
-    await this.sessions.registerOutbound(session.sessionPDA, channel, responder.toBase58());
+    await this.sessions.registerOutbound(record.sessionPDA, channel, responder.toBase58());
     return channel;
   }
 
@@ -153,7 +160,10 @@ export class Synapse {
     const offerData = decryptConnectionData(record.encryptedOffer, this.keypair, initiator);
     const answer = await createAnswer(offerData);
     const encryptedAnswer = encryptConnectionData(answer.data, this.keypair, initiator);
-    await this.signaling.respondToSession(record.sessionPDA, encryptedAnswer);
+    const signature = await this.signaling.respondToSession(record.sessionPDA, encryptedAnswer);
+    if (this.onTransaction) {
+      this.onTransaction(signature, `Accepted Connection from ${record.initiator.toBase58()}`);
+    }
     const channel = new Channel(answer.peer);
 
     await this.sessions.registerInbound(record.sessionPDA, channel, initiator.toBase58());

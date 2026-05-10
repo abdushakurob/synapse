@@ -14,8 +14,8 @@ export interface SessionRecord {
 }
 
 export interface SignalingAdapter {
-  createSession(initiator: PublicKey, responder: PublicKey, encryptedOffer: Uint8Array): Promise<SessionRecord>;
-  respondToSession(sessionPDA: PublicKey, encryptedAnswer: Uint8Array): Promise<void>;
+  createSession(initiator: PublicKey, responder: PublicKey, encryptedOffer: Uint8Array): Promise<{ record: SessionRecord; signature: string }>;
+  respondToSession(sessionPDA: PublicKey, encryptedAnswer: Uint8Array): Promise<string>;
   waitForAnswer(sessionPDA: PublicKey, timeoutMs?: number): Promise<Uint8Array>;
   getSession(sessionPDA: PublicKey): Promise<SessionRecord | undefined>;
   listSessions(responder: PublicKey): Promise<SessionRecord[]>;
@@ -33,16 +33,16 @@ export class InMemorySignalingAdapter implements SignalingAdapter {
     initiator: PublicKey,
     responder: PublicKey,
     encryptedOffer: Uint8Array,
-  ): Promise<SessionRecord> {
+  ): Promise<{ record: SessionRecord; signature: string }> {
     const createdAt = Date.now();
     const [sessionPDA] = PublicKey.findProgramAddressSync(
       [
         Buffer.from("session"),
         initiator.toBuffer(),
         responder.toBuffer(),
-        Buffer.from(createdAt.toString()), // Using string for now to match simplicity, though le_bytes is better
+        Buffer.from(createdAt.toString()),
       ],
-      new PublicKey("eCv677gAYX6ptLtJrPv9Rj8C4eGA4c9ecswRT5QJbeG"), // Program ID from AGENTS.md
+      new PublicKey("eCv677gAYX6ptLtJrPv9Rj8C4eGA4c9ecswRT5QJbeG"),
     );
 
     const record: SessionRecord = {
@@ -55,10 +55,10 @@ export class InMemorySignalingAdapter implements SignalingAdapter {
       expiresAt: createdAt + 5 * 60 * 1000,
     };
     this.sessions.set(sessionPDA.toBase58(), record);
-    return record;
+    return { record, signature: "local_dummy_sig_" + Math.random().toString(36).substring(7) };
   }
 
-  async respondToSession(sessionPDA: PublicKey, encryptedAnswer: Uint8Array): Promise<void> {
+  async respondToSession(sessionPDA: PublicKey, encryptedAnswer: Uint8Array): Promise<string> {
     const key = sessionPDA.toBase58();
     const existing = this.sessions.get(key);
     if (!existing) {
@@ -66,6 +66,7 @@ export class InMemorySignalingAdapter implements SignalingAdapter {
     }
     existing.encryptedAnswer = encryptedAnswer;
     existing.status = "active";
+    return "local_dummy_sig_" + Math.random().toString(36).substring(7);
   }
 
   async waitForAnswer(sessionPDA: PublicKey, timeoutMs = 30_000): Promise<Uint8Array> {
@@ -104,8 +105,7 @@ export class SolanaSignalingAdapter implements SignalingAdapter {
     initiator: PublicKey,
     responder: PublicKey,
     encryptedOffer: Uint8Array
-  ): Promise<SessionRecord> {
-    // Use seconds for consistency with Solana i64
+  ): Promise<{ record: SessionRecord; signature: string }> {
     const timestampSeconds = Math.floor(Date.now() / 1000);
     const tsBN = new BN(timestampSeconds);
     const timestampBuffer = Buffer.alloc(8);
@@ -121,8 +121,9 @@ export class SolanaSignalingAdapter implements SignalingAdapter {
       this.program.programId
     );
 
+    let signature = "";
     try {
-      await (this.program.methods as any)
+      signature = await (this.program.methods as any)
         .createSession(tsBN, Buffer.from(encryptedOffer))
         .accounts({
           session: sessionPDA,
@@ -132,23 +133,23 @@ export class SolanaSignalingAdapter implements SignalingAdapter {
         .rpc();
     } catch (err: any) {
        console.error(`[Signaling] createSession RPC failed: ${err.message}`);
-       if (err.stack) console.error(err.stack);
        throw err;
     }
 
     const record = await this.getSession(sessionPDA);
     if (!record) throw new Error("Failed to create session on-chain");
-    return record;
+    return { record, signature };
   }
 
-  async respondToSession(sessionPDA: PublicKey, encryptedAnswer: Uint8Array): Promise<void> {
-    await (this.program.methods as any)
+  async respondToSession(sessionPDA: PublicKey, encryptedAnswer: Uint8Array): Promise<string> {
+    const signature = await (this.program.methods as any)
       .respondSession(Buffer.from(encryptedAnswer))
       .accounts({
         session: sessionPDA,
         responder: this.program.provider.publicKey,
       })
       .rpc();
+    return signature;
   }
 
   async waitForAnswer(sessionPDA: PublicKey, timeoutMs = 30000): Promise<Uint8Array> {

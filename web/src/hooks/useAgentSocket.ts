@@ -1,9 +1,15 @@
 import { useState, useEffect, useCallback } from "react";
 
 export interface LogEntry {
-  type: "send" | "receive" | "status" | "info" | "reasoning";
+  type: "send" | "receive" | "status" | "info" | "reasoning" | "blockchain";
   timestamp: string;
   message: any;
+}
+
+export interface BlockchainTx {
+  signature: string;
+  description: string;
+  timestamp: string;
 }
 
 export interface SessionData {
@@ -22,8 +28,10 @@ export interface Portfolio {
 export function useAgentSocket(wsUrl: string) {
   const [socket, setSocket] = useState<WebSocket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
   
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [transactions, setTransactions] = useState<BlockchainTx[]>([]);
   const [portfolio, setPortfolio] = useState<Portfolio>({ USDC: 0, SYN: 0 });
   const [activeSession, setActiveSession] = useState<SessionData | null>(null);
 
@@ -78,7 +86,21 @@ export function useAgentSocket(wsUrl: string) {
             break;
 
           case "reasoning":
-            setLogs(prev => [...prev, { type: "reasoning", timestamp: new Date(data.timestamp).toLocaleTimeString(), message: data.text }]);
+            setLogs(prev => [...prev, { type: "reasoning", timestamp: new Date(data.timestamp || Date.now()).toLocaleTimeString(), message: data.text }]);
+            break;
+            
+          case "blockchain_tx":
+            const newTx: BlockchainTx = {
+              signature: data.signature,
+              description: data.description,
+              timestamp: new Date().toLocaleTimeString()
+            };
+            setTransactions(prev => [newTx, ...prev]);
+            setLogs(prev => [...prev, { 
+              type: "blockchain", 
+              timestamp: newTx.timestamp, 
+              message: `${data.description} (Sig: ${data.signature.substring(0, 8)}...)` 
+            }]);
             break;
         }
       } catch (err) {
@@ -93,11 +115,12 @@ export function useAgentSocket(wsUrl: string) {
     };
   }, [wsUrl]);
 
-  const sendMessage = useCallback((msg: any) => {
+  const startNegotiation = useCallback(() => {
     if (socket && isConnected) {
-      socket.send(JSON.stringify(msg));
+      socket.send(JSON.stringify({ type: "start" }));
+      setHasStarted(true);
     }
   }, [socket, isConnected]);
 
-  return { isConnected, logs, portfolio, activeSession, sendMessage };
+  return { isConnected, logs, portfolio, activeSession, transactions, hasStarted, startNegotiation };
 }

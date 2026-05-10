@@ -37,6 +37,10 @@ async function main() {
     keypair: walletKeypair,
     registry: new SolanaRegistryAdapter(program),
     signaling: new SolanaSignalingAdapter(program),
+    onTransaction: (signature, description) => {
+      console.log(`[${config.firmName}] Transaction: ${description} (Sig: ${signature})`);
+      ui.notify("blockchain_tx", { signature, description });
+    }
   });
 
   try {
