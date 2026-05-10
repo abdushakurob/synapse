@@ -35,6 +35,58 @@
       "args": []
     },
     {
+      "name": "configure_agent",
+      "discriminator": [
+        185,
+        111,
+        49,
+        42,
+        77,
+        47,
+        113,
+        107
+      ],
+      "accounts": [
+        {
+          "name": "agent_registry",
+          "writable": true
+        },
+        {
+          "name": "owner",
+          "signer": true,
+          "relations": [
+            "agent_registry"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "accept_list",
+          "type": {
+            "vec": "pubkey"
+          }
+        },
+        {
+          "name": "is_open",
+          "type": "bool"
+        },
+        {
+          "name": "category",
+          "type": {
+            "option": "string"
+          }
+        },
+        {
+          "name": "capabilities",
+          "type": {
+            "option": {
+              "vec": "string"
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "create_session",
       "discriminator": [
         242,
@@ -88,6 +140,27 @@
           "name": "responder"
         },
         {
+          "name": "responder_registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  103,
+                  101,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "responder_alias"
+              }
+            ]
+          }
+        },
+        {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
         }
@@ -100,6 +173,10 @@
         {
           "name": "encrypted_offer",
           "type": "bytes"
+        },
+        {
+          "name": "_responder_alias",
+          "type": "string"
         }
       ]
     },
@@ -176,6 +253,16 @@
         {
           "name": "alias",
           "type": "string"
+        },
+        {
+          "name": "category",
+          "type": "string"
+        },
+        {
+          "name": "capabilities",
+          "type": {
+            "vec": "string"
+          }
         }
       ]
     },
@@ -248,18 +335,28 @@
     },
     {
       "code": 6001,
+      "name": "CategoryTooLong",
+      "msg": "Category is too long. Maximum 32 characters."
+    },
+    {
+      "code": 6002,
       "name": "InvalidSessionStatus",
       "msg": "Session is not in pending status."
     },
     {
-      "code": 6002,
+      "code": 6003,
       "name": "SessionExpired",
       "msg": "Session has expired."
     },
     {
-      "code": 6003,
+      "code": 6004,
       "name": "SessionNotExpired",
       "msg": "Session has not expired yet."
+    },
+    {
+      "code": 6005,
+      "name": "UnauthorizedInitiator",
+      "msg": "Initiator is not authorized to connect to this agent."
     }
   ],
   "types": [
@@ -275,6 +372,26 @@
           {
             "name": "owner",
             "type": "pubkey"
+          },
+          {
+            "name": "category",
+            "type": "string"
+          },
+          {
+            "name": "capabilities",
+            "type": {
+              "vec": "string"
+            }
+          },
+          {
+            "name": "accept_list",
+            "type": {
+              "vec": "pubkey"
+            }
+          },
+          {
+            "name": "is_open",
+            "type": "bool"
           },
           {
             "name": "registered_at",

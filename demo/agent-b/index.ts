@@ -44,10 +44,9 @@ async function main() {
   const connection = new Connection(RPC_URL, "confirmed");
 
   // High-level initialization
-  const synapse = Synapse.initSolana({
+  const synapse = new Synapse({
     profile: config.alias,
     keypair: walletKeypair,
-    connection: connection,
     onTransaction: (signature, description) => {
       console.log(`[${config.firmName}] Transaction: ${description} (Sig: ${signature})`);
       ui.notify("blockchain_tx", { signature, description });
@@ -58,6 +57,7 @@ async function main() {
     console.log(`[${config.firmName}] Registering alias "${config.alias}" on-chain...`);
     await synapse.register(config.alias);
     console.log(`[${config.firmName}] Alias registered successfully.`);
+    ui.notify("portfolio_updated", { portfolio: config.portfolio });
   } catch (err: any) {
     console.error(`[${config.firmName}] Registration failed: ${err.message}`);
     // If it's already taken, we can continue
@@ -65,79 +65,47 @@ async function main() {
        // process.exit(1);
     }
   }
-  
-  synapse.onRequest(async (request) => {
-    console.log(`[${config.firmName}] New connection request from: ${request.from} (Session: ${request.sessionPDA.toBase58()})`);
-    console.log(`[${config.firmName}] Evaluating request... Accepting.`);
-    
-    try {
-      const channel = await synapse.acceptSession(request.sessionPDA.toBase58());
-      console.log(`[${config.firmName}] Session accepted and channel opened!`);
-      ui.notify("session_opened", { remoteFirm: "Apex Capital", sessionPDA: request.sessionPDA.toBase58() });
-      ui.notify("portfolio_updated", { portfolio: config.portfolio });
 
-      const history: ChatMessage[] = [];
+  synapse.onConnection(async (channel, from) => {
+    console.log(`[${config.firmName}] New authorized connection from: ${from}`);
+    ui.notify("session_opened", { remoteFirm: "Apex Capital", sessionPDA: "On-Chain Active" });
+    ui.notify("portfolio_updated", { portfolio: config.portfolio });
 
-      channel.onMessage(async (msg: any) => {
-        // Schema validation
-        if (!msg || typeof msg !== "object" || !msg.type) {
-          console.warn(`[${config.firmName}] Invalid message format received.`);
-          return;
+    const history: ChatMessage[] = [];
+
+    channel.onMessage(async (msg: any) => {
+      if (!msg || typeof msg !== "object" || !msg.type) return;
+
+      const message = msg as Message;
+      console.log(`[${config.firmName}] Received:`, JSON.stringify(message));
+      ui.notify("message_received", { message });
+      history.push({ role: "user", content: JSON.stringify(message) });
+
+      if (message.type === "execution" && message.agreed) {
+        config.portfolio.USDC += (message.quantity * message.price);
+        config.portfolio.SYN -= message.quantity;
+        ui.notify("portfolio_updated", { portfolio: config.portfolio });
+        return;
+      }
+
+      try {
+        console.log(`[${config.firmName}] Thinking...`);
+        const { reasoning, message: reply } = await generateAgentResponse(config.systemPrompt, history, config.portfolio);
+
+        ui.notify("reasoning", { text: reasoning });
+        ui.notify("message_sent", { message: reply });
+        channel.send(reply);
+        history.push({ role: "assistant", content: JSON.stringify(reply) });
+
+        if (reply.type === "execution" && reply.agreed) {
+          config.portfolio.USDC += (reply.quantity * reply.price);
+          config.portfolio.SYN -= reply.quantity;
+          ui.notify("portfolio_updated", { portfolio: config.portfolio });
         }
-
-        const message = msg as Message;
-        console.log(`[${config.firmName}] Received:`, JSON.stringify(message));
-        ui.notify("message_received", { message });
-        
-        history.push({ role: "user", content: JSON.stringify(message) });
-
-        // Handle execution updates to portfolio locally
-        if (message.type === "execution") {
-          if (message.agreed) {
-            console.log(`[${config.firmName}] CONFIRMED: Sold ${message.quantity} SYN @ $${message.price}`);
-            config.portfolio.USDC += (message.quantity * message.price);
-            config.portfolio.SYN -= message.quantity;
-            ui.notify("portfolio_updated", { portfolio: config.portfolio });
-            channel.send({ type: "status", message: "Trade confirmed. Session remains open for inspection." });
-          }
-          return;
-        }
-
-        if (message.type === "reject") {
-          console.log(`[${config.firmName}] Client rejected: ${message.reason}`);
-          return;
-        }
-
-        if (message.type === "status") {
-          console.log(`[${config.firmName}] Client status: ${message.message}`);
-          return;
-        }
-
-        try {
-          console.log(`[${config.firmName}] Thinking...`);
-          const { reasoning, message: reply } = await generateAgentResponse(config.systemPrompt, history, config.portfolio);
-          
-          console.log(`[${config.firmName}] Reasoning: ${reasoning}`);
-          ui.notify("reasoning", { text: reasoning });
-          
-          console.log(`[${config.firmName}] Sending:`, JSON.stringify(reply));
-          ui.notify("message_sent", { message: reply });
-          channel.send(reply);
-          
-          history.push({ role: "assistant", content: JSON.stringify(reply) });
-          
-          if (reply.type === "execution" && reply.agreed) {
-             config.portfolio.USDC += (reply.quantity * reply.price);
-             config.portfolio.SYN -= reply.quantity;
-             ui.notify("portfolio_updated", { portfolio: config.portfolio });
-          }
-        } catch (err: any) {
-          console.error(`[${config.firmName}] LLM Error:`, err.message);
-        }
-      });
-    } catch (err: any) {
-      console.error(`[${config.firmName}] Failed to accept session: ${err.message}`);
-    }
+      } catch (err: any) {
+        console.error(`[${config.firmName}] LLM Error:`, err.message);
+      }
+    });
   });
 
   synapse.onConnection(async (channel, from) => {

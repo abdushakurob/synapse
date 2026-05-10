@@ -145,6 +145,32 @@
             font-weight: 500;
         }
 
+        .action-btn {
+            width: 100%;
+            padding: 12px;
+            background: var(--primary);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .action-btn:hover {
+            background: #0055D4;
+            transform: translateY(-1px);
+        }
+
+        .action-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
         .session-info {
             font-size: 14px;
             display: flex;
@@ -170,14 +196,16 @@
 
         main {
             padding: 32px;
-            display: flex;
-            flex-direction: column;
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            grid-template-rows: auto 1fr;
             gap: 24px;
-            overflow-y: auto;
+            overflow: hidden;
         }
 
         .log-container {
-            flex: 1;
+            grid-column: 1;
+            grid-row: 2;
             background: rgba(22, 24, 33, 0.5);
             border: 1px solid var(--border);
             border-radius: 16px;
@@ -185,7 +213,43 @@
             display: flex;
             flex-direction: column;
             gap: 16px;
-            position: relative;
+            overflow-y: auto;
+        }
+
+        .reasoning-container {
+            grid-column: 2;
+            grid-row: 1 / 3;
+            background: rgba(0, 102, 255, 0.05);
+            border: 1px solid var(--primary);
+            border-radius: 16px;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            overflow-y: auto;
+        }
+
+        .reasoning-entry {
+            font-size: 13px;
+            font-style: italic;
+            color: var(--text-dim);
+            line-height: 1.6;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(0, 102, 255, 0.1);
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        .blockchain-container {
+            grid-column: 1;
+            grid-row: 1;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 12px 16px;
+            font-size: 12px;
+            font-family: 'JetBrains Mono', monospace;
+            max-height: 100px;
+            overflow-y: auto;
         }
 
         .log-entry {
@@ -280,6 +344,13 @@
 
         <sidebar>
             <div class="sidebar-section">
+                <h2>Control</h2>
+                <button id="start-btn" class="action-btn">
+                    <span id="start-btn-text">Initiate Connection</span>
+                </button>
+            </div>
+
+            <div class="sidebar-section">
                 <h2>Portfolio</h2>
                 <div class="portfolio-card">
                     <div class="asset-row">
@@ -304,36 +375,44 @@
                         <span class="info-label">Session PDA</span>
                         <span class="info-value" id="session-pda">None</span>
                     </div>
-                    <div class="info-item">
-                        <span class="info-label">Latency</span>
-                        <span class="info-value">38ms</span>
-                    </div>
                 </div>
             </div>
         </sidebar>
 
         <main>
-            <div id="execution-banner" class="execution-banner">
-                <div>
-                    <h3>✓ TRADE EXECUTED</h3>
-                    <p id="execution-text">Bought 500,000 SYN @ $0.455</p>
-                </div>
+            <div class="blockchain-container" id="blockchain-container">
+                <div style="color: var(--text-dim)">[System] Awaiting on-chain activity...</div>
+            </div>
+
+            <div class="reasoning-container" id="reasoning-container">
+                <h2 style="font-size: 12px; color: var(--primary); letter-spacing: 2px; text-transform: uppercase;">Agent Reasoning</h2>
+                <div id="reasoning-content" style="color: var(--text-dim); font-size: 13px;">Agent idle. Waiting for initiation signal.</div>
             </div>
 
             <div class="log-container" id="log-container">
-                <!-- Logs will be injected here -->
+                <div id="execution-banner" class="execution-banner" style="margin-bottom: 16px;">
+                    <div>
+                        <h3>✓ TRADE EXECUTED</h3>
+                        <p id="execution-text">Bought 500,000 SYN @ $0.455</p>
+                    </div>
+                </div>
+                <div id="messages-log"></div>
             </div>
         </main>
     </div>
 
     <script>
-        const logContainer = document.getElementById('log-container');
+        const logContainer = document.getElementById('messages-log');
         const usdcVal = document.getElementById('val-usdc');
         const synVal = document.getElementById('val-syn');
         const sessionRemote = document.getElementById('session-remote');
         const sessionPda = document.getElementById('session-pda');
         const executionBanner = document.getElementById('execution-banner');
         const executionText = document.getElementById('execution-text');
+        const startBtn = document.getElementById('start-btn');
+        const startBtnText = document.getElementById('start-btn-text');
+        const reasoningContent = document.getElementById('reasoning-content');
+        const blockchainContainer = document.getElementById('blockchain-container');
 
         function addLog(message, type) {
             const entry = document.createElement('div');
@@ -350,10 +429,31 @@
             logContainer.prepend(entry);
         }
 
+        function addBlockchain(sig, desc) {
+            const entry = document.createElement('div');
+            entry.style.marginBottom = '4px';
+            const shortSig = sig.slice(0, 8) + '...';
+            entry.innerHTML = `<span style="color: var(--primary)">[TX]</span> ${desc} <a href="https://explorer.solana.com/tx/${sig}?cluster=devnet" target="_blank" style="color: var(--text-dim); text-decoration: none;">(${shortSig} ↗)</a>`;
+            blockchainContainer.prepend(entry);
+        }
+
+        function addReasoning(text) {
+            const entry = document.createElement('div');
+            entry.className = 'reasoning-entry';
+            entry.innerText = text;
+            reasoningContent.prepend(entry);
+        }
+
         const ws = new WebSocket('ws://localhost:3001');
 
         ws.onopen = () => {
             addLog('WebSocket Connection established.', '');
+        };
+
+        startBtn.onclick = () => {
+            ws.send(JSON.stringify({ type: 'start' }));
+            startBtn.disabled = true;
+            startBtnText.innerText = 'Connecting...';
         };
 
         ws.onmessage = (event) => {
@@ -363,6 +463,7 @@
                 case 'session_opened':
                     sessionRemote.innerText = data.remoteFirm;
                     sessionPda.innerText = data.sessionPDA;
+                    startBtnText.innerText = 'Connected';
                     addLog(`Connection established with ${data.remoteFirm}`, '');
                     break;
 
@@ -378,6 +479,18 @@
                     usdcVal.innerText = '$' + data.portfolio.USDC.toLocaleString(undefined, {minimumFractionDigits: 2});
                     synVal.innerText = data.portfolio.SYN.toLocaleString();
                     break;
+
+                case 'reasoning':
+                    addReasoning(data.text);
+                    break;
+
+                case 'blockchain_tx':
+                    addBlockchain(data.signature, data.description);
+                    break;
+
+                case 'status':
+                    addLog(data.message, 'status');
+                    break;
             }
         };
 
@@ -387,24 +500,24 @@
 
             switch (msg.type) {
                 case 'rfq':
-                    text = `${prefix} RFQ sent: ${msg.side.toUpperCase()} ${msg.quantity.toLocaleString()} ${msg.asset}`;
+                    text = `${prefix} RFQ: ${msg.side.toUpperCase()} ${msg.quantity.toLocaleString()} ${msg.asset}`;
                     break;
                 case 'quote':
-                    text = `${prefix} Quote received: $${msg.price} / ${msg.asset}`;
+                    text = `${prefix} Quote: $${msg.price} / ${msg.asset}`;
                     break;
                 case 'counter':
-                    text = `${prefix} Counter ${direction === 'sent' ? 'sent' : 'received'}: $${msg.price}`;
+                    text = `${prefix} Counter: $${msg.price}`;
                     break;
                 case 'execution':
-                    text = `${prefix} ACCEPTED — executing at $${msg.price}`;
+                    text = `${prefix} EXECUTION AGREED @ $${msg.price}`;
                     executionBanner.style.display = 'flex';
                     executionText.innerText = `Bought ${msg.quantity.toLocaleString()} ${msg.asset} @ $${msg.price}`;
                     break;
                 case 'reject':
-                    text = `${prefix} Negotiation rejected: ${msg.reason}`;
+                    text = `${prefix} Rejected: ${msg.reason}`;
                     break;
                 case 'status':
-                    text = `i Status: ${msg.message}`;
+                    text = `i ${msg.message}`;
                     break;
             }
 

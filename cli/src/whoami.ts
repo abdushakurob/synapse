@@ -1,50 +1,50 @@
-import { Connection, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
 import { Program, AnchorProvider, Wallet } from "@coral-xyz/anchor";
 import { IDL } from "@synapse-io/sdk";
 import * as fs from "fs";
+import { getProfilePath } from "./utils";
 
 const RPC_URL = "https://api.devnet.solana.com";
 
-export async function whoami() {
+export async function whoami(options: { profile: string }) {
+  const profile = options.profile || "default";
+  const walletPath = getProfilePath(profile);
+
+  if (!fs.existsSync(walletPath)) {
+    throw new Error(`Profile '${profile}' not found. Run 'synapse init --profile ${profile}' first.`);
+  }
+
+  const secret = JSON.parse(fs.readFileSync(walletPath, "utf-8"));
+  const keypair = Keypair.fromSecretKey(Uint8Array.from(secret));
   const connection = new Connection(RPC_URL, "confirmed");
   
-  // Scan for all dev-wallet*.json files in current directory
-  const files = fs.readdirSync(process.cwd()).filter(f => f.startsWith("dev-wallet") && f.endsWith(".json"));
+  const provider = new AnchorProvider(connection, new Wallet(keypair), {
+    commitment: "confirmed",
+  });
+  const program = new Program(IDL as any, provider as any);
+
+  const bal = await connection.getBalance(keypair.publicKey);
   
-  if (files.length === 0) {
-    console.log(`[CLI] No identity files found (dev-wallet*.json). Run 'synapse init' first.`);
-    return;
-  }
+  console.log(`\n--- PROTOCOL IDENTITY [ ${profile} ] ---`);
+  console.log(`Public Key: ${keypair.publicKey.toBase58()}`);
+  console.log(`Balance:    ${(bal / LAMPORTS_PER_SOL).toFixed(4)} SOL`);
 
-  console.log(`[CLI] DISCOVERED ${files.length} IDENTITIES\n`);
+  // Find alias on-chain
+  const accounts = await (program.account as any).agentRegistry.all([
+    { memcmp: { offset: 8 + 4 + 32, bytes: keypair.publicKey.toBase58() } }
+  ]);
 
-  for (const file of files) {
-    try {
-      const secret = JSON.parse(fs.readFileSync(file, "utf-8"));
-      const keypair = Keypair.fromSecretKey(Uint8Array.from(secret));
-      
-      const provider = new AnchorProvider(connection, new Wallet(keypair), {
-        commitment: "confirmed",
-      });
-      const program = new Program(IDL as any, provider as any);
-
-      const bal = await connection.getBalance(keypair.publicKey);
-      
-      console.log(`--- [ ${file} ] ---`);
-      console.log(`Public Key: ${keypair.publicKey.toBase58()}`);
-      console.log(`Balance:    ${bal / LAMPORTS_PER_SOL} SOL`);
-
-      const allRegistries = await (program.account as any).agentRegistry.all();
-      const myAliases = allRegistries.filter((a: any) => a.account.owner.equals(keypair.publicKey));
-
-      if (myAliases.length > 0) {
-        console.log(`Aliases:    ${myAliases.map((a: any) => (a.account as any).alias).join(", ")}`);
-      } else {
-        console.log(`Aliases:    None`);
-      }
-      console.log(""); // newline
-    } catch (err: any) {
-      console.error(`[CLI] Failed to read ${file}: ${err.message}`);
+  if (accounts.length > 0) {
+    const acc = accounts[0].account;
+    console.log(`Alias:      ${acc.alias}`);
+    console.log(`Category:   ${acc.category || "none"}`);
+    console.log(`Capabilities: ${acc.capabilities?.join(", ") || "none"}`);
+    console.log(`Firewall:   ${acc.isOpen ? "OPEN" : "STRICT"}`);
+    if (!acc.isOpen) {
+      console.log(`Authorized: ${acc.acceptList.length} agent(s)`);
     }
+  } else {
+    console.log(`Status:     UNREGISTERED`);
   }
+  console.log("");
 }

@@ -30,15 +30,6 @@ async function runTest() {
     });
   });
 
-  synapseB.onRequest(async (request) => {
-    console.log(`[Test] Agent B received request from ${request.from}. Accepting...`);
-    try {
-      await synapseB.acceptSession(request.sessionPDA.toBase58());
-    } catch (err: any) {
-      console.error("[Test] Agent B accept failed:", err);
-    }
-  });
-
   console.log("[Test] Agent A connecting to Agent B...");
   try {
     const channelA = await synapseA.connect("meridian-trading");

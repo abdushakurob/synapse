@@ -1,11 +1,10 @@
 import zlib from "zlib";
 import { Keypair, PublicKey, Connection } from "@solana/web3.js";
-import { Program, AnchorProvider, Wallet } from "@coral-xyz/anchor";
+import { Program, AnchorProvider, Wallet, BN } from "@coral-xyz/anchor";
 import { Channel } from "./channel";
 import { decrypt, ed25519SecretToCurve25519, ed25519ToCurve25519, encrypt } from "./crypto";
-import { InMemoryRegistryAdapter, RegistryAdapter, SolanaRegistryAdapter } from "./registry";
-import { InMemorySignalingAdapter, SessionRecord, SignalingAdapter, SolanaSignalingAdapter } from "./signaling";
-import { FileRegistryAdapter, FileSignalingAdapter } from "./file-adapters";
+import { RegistryAdapter, SolanaRegistryAdapter } from "./registry";
+import { SessionRecord, SignalingAdapter, SolanaSignalingAdapter } from "./signaling";
 import { ManagedSession, SessionManager } from "./session-manager";
 import { completeConnection, ConnectionData, createAnswer, createOffer } from "./webrtc";
 import IDL from "./idl.json";
@@ -17,17 +16,26 @@ export class ConnectionTimeoutError extends Error {
   }
 }
 
+export class ConnectionRejectedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ConnectionRejectedError";
+  }
+}
+
 interface SynapseOptions {
   profile: string;
   keypair?: Keypair;
+  secretKey?: string; // Base58
   registry?: RegistryAdapter;
   signaling?: SignalingAdapter;
   maxConcurrent?: number;
+  accept?: string[];
+  network?: string;
   onTransaction?: (signature: string, description: string) => void;
 }
 
 type ConnectionHandler = (channel: Channel, from: string) => void | Promise<void>;
-type RequestHandler = (request: { sessionPDA: PublicKey, from: string }) => void | Promise<void>;
 
 export class Synapse {
   readonly profile: string;
@@ -37,191 +45,224 @@ export class Synapse {
   private readonly registry: RegistryAdapter;
   private readonly signaling: SignalingAdapter;
   private connectionHandler?: ConnectionHandler;
-  private requestHandler?: RequestHandler;
   private onTransaction?: (signature: string, description: string) => void;
+  private acceptList: string[] = [];
+  private isOpen: boolean = true;
 
   constructor(options: SynapseOptions) {
     this.profile = options.profile;
-    this.keypair = options.keypair ?? Keypair.generate();
-    this.registry = options.registry ?? new InMemoryRegistryAdapter();
-    this.signaling = options.signaling ?? new InMemorySignalingAdapter();
-    this.onTransaction = options.onTransaction;
+    
+    if (options.keypair) {
+      this.keypair = options.keypair;
+    } else if (options.secretKey) {
+      const bs58 = require("bs58");
+      this.keypair = Keypair.fromSecretKey(bs58.decode(options.secretKey));
+    } else {
+      this.keypair = Keypair.generate();
+    }
 
+    // Default to Solana if no adapters provided
+    if (!options.registry || !options.signaling) {
+      const network = options.network || "devnet";
+      const rpc = network === "devnet" ? "https://api.devnet.solana.com" : "https://api.mainnet-beta.solana.com";
+      const connection = new Connection(rpc, "confirmed");
+      const provider = new AnchorProvider(connection, new Wallet(this.keypair), { commitment: "confirmed" });
+      const program = new Program(IDL as any, provider);
+      this.registry = options.registry || new SolanaRegistryAdapter(program);
+      this.signaling = options.signaling || new SolanaSignalingAdapter(program);
+    } else {
+      this.registry = options.registry;
+      this.signaling = options.signaling;
+    }
+
+    this.onTransaction = options.onTransaction;
     this.sessions = new SessionManager({
       maxConcurrent: options.maxConcurrent ?? 10,
     });
+
+    if (options.accept) {
+      this.acceptList = options.accept;
+      this.isOpen = options.accept.includes("*");
+      this.setAcceptList(options.accept).catch(console.error);
+    }
   }
 
-  /**
-   * Convenience factory to initialize a Synapse instance for Solana Devnet.
-   */
-  static initSolana(options: {
-    profile: string;
-    keypair: Keypair;
-    connection: Connection;
-    onTransaction?: (signature: string, description: string) => void;
-  }): Synapse {
-    const provider = new AnchorProvider(
-      options.connection,
-      new Wallet(options.keypair),
-      { commitment: "confirmed" }
-    );
-    const program = new Program(IDL as any, provider);
-
-    return new Synapse({
-      profile: options.profile,
-      keypair: options.keypair,
-      registry: new SolanaRegistryAdapter(program),
-      signaling: new SolanaSignalingAdapter(program),
-      onTransaction: options.onTransaction,
-    });
-  }
-
-  async register(alias: string): Promise<void> {
-    const signature = await this.registry.register(alias, this.keypair.publicKey);
+  async register(alias: string, options: { category?: string, capabilities?: string[] } = {}): Promise<void> {
+    const signature = await this.registry.register(alias, options.category || "general", options.capabilities || []);
     if (signature && this.onTransaction) {
       this.onTransaction(signature as string, `Registered Protocol Alias: ${alias}`);
     }
   }
 
-  onConnection(handler: ConnectionHandler): void {
-    this.connectionHandler = handler;
-  }
-
-  onRequest(handler: RequestHandler): void {
-    this.requestHandler = handler;
-    // For local testing or real blockchain events, start listening
-    this.startPolling();
-  }
-
-  private async notifyRequest(sessionPDA: PublicKey, encryptedOffer: Uint8Array) {
-    await this.sessions.handleInbound(sessionPDA, encryptedOffer);
-    if (this.requestHandler) {
-      const record = await this.signaling.getSession(sessionPDA);
-      if (record) {
-        await this.requestHandler({ sessionPDA, from: record.initiator.toBase58() });
-      }
-    }
-  }
-
-  private async startPolling() {
-    console.log(`[${this.profile}] Starting session listener...`);
-
-    // Use push-based notifications (WebSockets) if available
-    if (this.signaling.onNewSession) {
-      this.signaling.onNewSession(this.keypair.publicKey, (session) => {
-        if (!this.sessions.get(session.sessionPDA.toBase58()) && !this.sessions.getQueue().some(q => q.sessionPDA.toBase58() === session.sessionPDA.toBase58())) {
-          this.notifyRequest(session.sessionPDA, session.encryptedOffer);
-        }
-      });
-
-      // Catch-up check for sessions that arrived before subscription
-      const initial = await this.signaling.listSessions(this.keypair.publicKey);
-      for (const session of initial) {
-        if (!this.sessions.get(session.sessionPDA.toBase58()) && !this.sessions.getQueue().some(q => q.sessionPDA.toBase58() === session.sessionPDA.toBase58())) {
-          await this.notifyRequest(session.sessionPDA, session.encryptedOffer);
-        }
-      }
-      return;
-    }
-
-    // Fallback to polling for simpler adapters
-    while (true) {
+  async setAcceptList(list: string[]): Promise<void> {
+    this.acceptList = list;
+    this.isOpen = list.includes("*");
+    const pubkeys: PublicKey[] = [];
+    
+    for (const item of list) {
+      if (item === "*") continue;
       try {
-        const sessions = await (this.signaling as any).listSessions?.(this.keypair.publicKey);
-        if (sessions) {
-          for (const session of sessions) {
-            if (!this.sessions.get(session.sessionPDA.toBase58()) && !this.sessions.getQueue().some(q => q.sessionPDA.toBase58() === session.sessionPDA.toBase58())) {
-               await this.notifyRequest(session.sessionPDA, session.encryptedOffer);
-            }
-          }
+        if (item.length > 32 && !item.includes("-")) {
+          pubkeys.push(new PublicKey(item));
+        } else {
+          const pk = await this.registry.resolve(item);
+          pubkeys.push(pk);
         }
       } catch (err) {
-        // Silently continue
+        console.warn(`[SDK] Could not resolve alias in accept list: ${item}`);
       }
-      await new Promise(r => setTimeout(r, 5000));
+    }
+
+    const signature = await this.registry.configure({
+      acceptList: pubkeys,
+      isOpen: this.isOpen,
+    });
+
+    if (this.onTransaction) {
+      this.onTransaction(signature, `Updated Agentic Firewall: ${list.join(", ")}`);
     }
   }
 
-  async connect(alias: string): Promise<Channel> {
-    const responder = await this.registry.resolve(alias);
+  async publish(metadata: { category?: string, capabilities?: string[] }): Promise<void> {
+    // Re-use configure to update metadata
+    const signature = await this.registry.configure({
+      acceptList: [], // Will be handled by the adapter to keep current
+      isOpen: true,
+      ...metadata
+    });
+    if (this.onTransaction) {
+      this.onTransaction(signature, `Published Discovery Metadata`);
+    }
+  }
+
+  async discover(filters: { category?: string; capabilities?: string[] }): Promise<any[]> {
+    return await this.registry.discover(filters);
+  }
+
+  onConnection(handler: ConnectionHandler): void {
+    this.connectionHandler = handler;
+    this.startListening();
+  }
+
+  private async startListening() {
+    console.log(`[${this.profile}] Starting Agentic Firewall & Listener...`);
+    if (this.signaling.onNewSession) {
+      this.signaling.onNewSession(this.keypair.publicKey, async (session) => {
+        try {
+          if (!this.sessions.get(session.sessionPDA.toBase58())) {
+            await this.acceptSession(session.sessionPDA.toBase58());
+          }
+        } catch (err: any) {
+          if (err instanceof ConnectionRejectedError) {
+            console.warn(`[Firewall] Blocked unauthorized session: ${err.message}`);
+          } else {
+            console.error(`[SDK] Error accepting session:`, err);
+          }
+        }
+      });
+    }
+
+  }
+
+  async connect(target: string | PublicKey): Promise<Channel> {
+    let responder: PublicKey;
+    let responderAlias: string;
+
+    if (typeof target === "string") {
+      if (target.length > 32 && !target.includes("-")) {
+        responder = new PublicKey(target);
+        // Find alias for the pubkey to satisfy contract seeds
+        const results = await this.registry.discover({});
+        const match = results.find(r => r.owner.equals(responder));
+        if (!match) throw new Error(`[SDK] Could not find alias for responder: ${target}`);
+        responderAlias = match.alias;
+      } else {
+        responderAlias = target;
+        responder = await this.registry.resolve(target);
+      }
+    } else {
+      responder = target;
+      const results = await this.registry.discover({});
+      const match = results.find(r => r.owner.equals(responder));
+      if (!match) throw new Error(`[SDK] Could not find alias for responder: ${target.toBase58()}`);
+      responderAlias = match.alias;
+    }
+
     const offer = await createOffer();
     const encryptedOffer = encryptConnectionData(offer.data, this.keypair, responder);
 
-    const { record, signature } = await this.signaling.createSession(
-      this.keypair.publicKey,
-      responder,
-      encryptedOffer,
-    );
-
-    if (this.onTransaction) {
-      this.onTransaction(signature, `Created Session Account for ${alias}`);
-    }
-
-    let encryptedAnswer: Uint8Array;
     try {
-      encryptedAnswer = await this.signaling.waitForAnswer(record.sessionPDA, 60000);
-    } catch {
-      throw new ConnectionTimeoutError("[SDK] Timed out waiting for responder answer (60s)");
-    }
+      const { record, signature } = await this.signaling.createSession(
+        this.keypair.publicKey,
+        responder,
+        encryptedOffer,
+        responderAlias
+      );
 
-    const answer = decryptConnectionData(encryptedAnswer, this.keypair, responder);
-    const peer = await completeConnection(offer.peer, answer);
-    const channel = new Channel(peer);
-    await this.sessions.registerOutbound(record.sessionPDA, channel, responder.toBase58());
-    return channel;
+      if (this.onTransaction) {
+        this.onTransaction(signature, `Initiated Handshake with ${responderAlias}`);
+      }
+
+      const encryptedAnswer = await this.signaling.waitForAnswer(record.sessionPDA, 30000);
+      const answer = decryptConnectionData(encryptedAnswer, this.keypair, responder);
+      const peer = await completeConnection(offer.peer, answer);
+      const channel = new Channel(peer);
+      await this.sessions.registerOutbound(record.sessionPDA, channel, responder.toBase58());
+      return channel;
+    } catch (err: any) {
+      if (err.message.includes("UnauthorizedInitiator")) {
+        throw new ConnectionRejectedError(`[SDK] Connection rejected: You are not on ${responderAlias}'s accept list.`);
+      }
+      throw err;
+    }
   }
 
-  /**
-   * Accepts a pending inbound session request and opens the channel.
-   */
   async acceptSession(sessionPDAStr: string): Promise<Channel> {
-    const queued = this.sessions.dequeue(sessionPDAStr);
-    if (!queued) {
-      throw new Error(`[SDK] Session ${sessionPDAStr} not found in pending queue.`);
-    }
+    const record = await this.signaling.getSession(new PublicKey(sessionPDAStr));
+    if (!record) throw new Error(`[SDK] Session ${sessionPDAStr} not found.`);
 
-    const record = await this.signaling.getSession(queued.sessionPDA);
-    if (!record) {
-      throw new Error(`[SDK] Session ${sessionPDAStr} not found on-chain.`);
+    // Local Agentic Firewall Check
+    if (!this.isOpen) {
+      // Find the alias of the initiator to check against acceptList
+      const discover = await this.registry.discover({});
+      const entry = discover.find(a => a.owner.equals(record.initiator));
+      const initiatorAlias = entry?.alias || record.initiator.toBase58();
+      
+      const isAuthorized = this.acceptList.some(pattern => {
+        if (pattern === initiatorAlias) return true;
+        if (pattern.includes("*")) {
+           const regex = new RegExp("^" + pattern.replace(/\./g, "\\.").replace(/\*/g, ".*") + "$");
+           return regex.test(initiatorAlias);
+        }
+        return false;
+      });
+
+      if (!isAuthorized) {
+        throw new ConnectionRejectedError(`[Firewall] Unauthorized connection from ${initiatorAlias} rejected.`);
+      }
     }
 
     const initiator = record.initiator;
     const offerData = decryptConnectionData(record.encryptedOffer, this.keypair, initiator);
     const answer = await createAnswer(offerData);
     const encryptedAnswer = encryptConnectionData(answer.data, this.keypair, initiator);
+    
     const signature = await this.signaling.respondToSession(record.sessionPDA, encryptedAnswer);
     if (this.onTransaction) {
-      this.onTransaction(signature, `Accepted Connection from ${record.initiator.toBase58()}`);
+      this.onTransaction(signature, `Accepted Connection from ${initiator.toBase58()}`);
     }
+    
     const channel = new Channel(answer.peer);
-
     await this.sessions.registerInbound(record.sessionPDA, channel, initiator.toBase58());
+    
     if (this.connectionHandler) {
       await this.connectionHandler(channel, initiator.toBase58());
     }
     return channel;
   }
-
-  /**
-   * Rejects a pending inbound session request.
-   */
-  async rejectSession(sessionPDAStr: string): Promise<void> {
-    const queued = this.sessions.dequeue(sessionPDAStr);
-    if (!queued) {
-      return;
-    }
-    // We could call expire_session or close_session on-chain if we wanted, 
-    // but simply ignoring it lets it expire or we can implement explicit reject later.
-    console.log(`[${this.profile}] Rejected session ${sessionPDAStr}`);
-  }
 }
 
-function encryptConnectionData(
-  data: ConnectionData,
-  sender: Keypair,
-  recipient: PublicKey,
-): Uint8Array {
+function encryptConnectionData(data: ConnectionData, sender: Keypair, recipient: PublicKey): Uint8Array {
   const senderCurveSecret = ed25519SecretToCurve25519(sender.secretKey.slice(0, 32));
   const recipientCurvePublic = ed25519ToCurve25519(recipient.toBytes());
   const payloadStr = JSON.stringify(data);
@@ -229,24 +270,19 @@ function encryptConnectionData(
   return encrypt(compressed, senderCurveSecret, recipientCurvePublic);
 }
 
-function decryptConnectionData(
-  encrypted: Uint8Array,
-  recipient: Keypair,
-  sender: PublicKey,
-): ConnectionData {
+function decryptConnectionData(encrypted: Uint8Array, recipient: Keypair, sender: PublicKey): ConnectionData {
   const recipientCurveSecret = ed25519SecretToCurve25519(recipient.secretKey.slice(0, 32));
   const senderCurvePublic = ed25519ToCurve25519(sender.toBytes());
   const decrypted = decrypt(encrypted, recipientCurveSecret, senderCurvePublic);
   const decompressed = zlib.inflateSync(Buffer.from(decrypted));
-  const parsed = JSON.parse(decompressed.toString("utf-8")) as ConnectionData;
-  return parsed;
+  return JSON.parse(decompressed.toString("utf-8")) as ConnectionData;
 }
 
 export { Channel } from "./channel";
 export { generateKeypair, loadKeypair, saveKeypair } from "./keypair";
-export { AgentNotFoundError, AliasTakenError, InMemoryRegistryAdapter, SolanaRegistryAdapter } from "./registry";
-export { InMemorySignalingAdapter, SolanaSignalingAdapter, SessionRecord } from "./signaling";
-export { FileRegistryAdapter, FileSignalingAdapter } from "./file-adapters";
+export { RegistryAdapter, SolanaRegistryAdapter } from "./registry";
+export { SolanaSignalingAdapter, SessionRecord } from "./signaling";
 export { SessionManager, ManagedSession } from "./session-manager";
 export { completeConnection, createAnswer, createOffer } from "./webrtc";
 export { default as IDL } from "./idl.json";
+

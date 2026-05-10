@@ -14,7 +14,7 @@ export interface SessionRecord {
 }
 
 export interface SignalingAdapter {
-  createSession(initiator: PublicKey, responder: PublicKey, encryptedOffer: Uint8Array): Promise<{ record: SessionRecord; signature: string }>;
+  createSession(initiator: PublicKey, responder: PublicKey, encryptedOffer: Uint8Array, responderAlias: string): Promise<{ record: SessionRecord; signature: string }>;
   respondToSession(sessionPDA: PublicKey, encryptedAnswer: Uint8Array): Promise<string>;
   waitForAnswer(sessionPDA: PublicKey, timeoutMs?: number): Promise<Uint8Array>;
   getSession(sessionPDA: PublicKey): Promise<SessionRecord | undefined>;
@@ -104,7 +104,8 @@ export class SolanaSignalingAdapter implements SignalingAdapter {
   async createSession(
     initiator: PublicKey,
     responder: PublicKey,
-    encryptedOffer: Uint8Array
+    encryptedOffer: Uint8Array,
+    responderAlias: string
   ): Promise<{ record: SessionRecord; signature: string }> {
     const timestampSeconds = Math.floor(Date.now() / 1000);
     const tsBN = new BN(timestampSeconds);
@@ -121,14 +122,21 @@ export class SolanaSignalingAdapter implements SignalingAdapter {
       this.program.programId
     );
 
+    // Get the responder registry PDA for the firewall check
+    const [responderRegistryPDA] = PublicKey.findProgramAddressSync(
+      [Buffer.from("agent"), Buffer.from(responderAlias)],
+      this.program.programId
+    );
+
     let signature = "";
     try {
       signature = await (this.program.methods as any)
-        .createSession(tsBN, Buffer.from(encryptedOffer))
+        .createSession(tsBN, Buffer.from(encryptedOffer), responderAlias)
         .accounts({
           session: sessionPDA,
           initiator: initiator,
           responder: responder,
+          responderRegistry: responderRegistryPDA,
         })
         .rpc();
     } catch (err: any) {

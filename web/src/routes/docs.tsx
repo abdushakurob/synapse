@@ -39,6 +39,7 @@ function DocsPage() {
     { id: "concurrency", label: "Concurrency" },
     { id: "architecture", label: "Protocol Layers" },
     { id: "integration", label: "SDK Integration" },
+    { id: "errors", label: "Error Handling" },
     { id: "cli", label: "Global CLI" },
     { id: "deployment", label: "Cloud Hosting" },
     { id: "economics", label: "Costs & Limits" },
@@ -116,22 +117,22 @@ function DocsPage() {
               <h2 className="headline text-4xl mb-8">Multi-Agent Management</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="panel p-8">
-                  <h3 className="text-lg font-medium mb-4">Handling Multiple Identities</h3>
+                  <h3 className="text-lg font-medium mb-4">Profile Architecture</h3>
                   <p className="text-sm text-muted-foreground leading-relaxed mb-4">
-                    On a single machine, you can manage multiple agents by creating distinct wallet files (e.g., <code className="text-primary">dev-wallet-a.json</code>).
+                    Manage a fleet of agents from a single machine using the profile system. Identities are stored centrally in <code className="text-primary">~/.synapse/profiles/</code>.
                   </p>
                   <ul className="space-y-2 text-xs text-muted-foreground uppercase tracking-widest list-disc pl-4">
-                    <li>Use <code className="text-foreground">synapse init</code> to generate new keys</li>
-                    <li>The CLI scans all <code className="text-foreground">dev-wallet*.json</code> files</li>
-                    <li>Use <code className="text-foreground">synapse whoami</code> to check status of all agents</li>
+                    <li>Use <code className="text-foreground">synapse init --profile [name]</code></li>
+                    <li>List all local agents with <code className="text-foreground">synapse profiles</code></li>
+                    <li>Update security with <code className="text-foreground">synapse set-accept</code></li>
                   </ul>
                 </div>
                 <div className="panel p-8">
-                  <h3 className="text-lg font-medium mb-4">Port Orchestration</h3>
+                  <h3 className="text-lg font-medium mb-4">Agentic Firewall (CORS)</h3>
                   <p className="text-sm text-muted-foreground leading-relaxed mb-4">
-                    When running multiple agents on one host, you must offset the WebSocket Bridge ports to avoid collisions.
+                    Restrict who can connect to your agent at the protocol layer. Unauthorized requests are rejected on-chain before touching your compute.
                   </p>
-                  <CodeBlock title="orchestration" language="typescript" code={`// Agent A\nnew UIBridge(3001);\n\n// Agent B\nnew UIBridge(3002);`} />
+                  <CodeBlock title="firewall" language="bash" code={`# Allow specific partners\nsynapse set-accept partner-alias 7xKf...9mPq\n\n# Open to all\nsynapse set-accept --open`} />
                 </div>
               </div>
             </section>
@@ -155,9 +156,9 @@ function DocsPage() {
                     </p>
                   </div>
                   <div className="p-6 bg-background/50 rounded-xl border border-border">
-                    <h4 className="font-medium mb-2">Auto-Cleanup</h4>
+                    <h4 className="font-medium mb-2">Discovery & Metadata</h4>
                     <p className="text-xs text-muted-foreground leading-relaxed">
-                      The SDK automatically calls <code className="text-primary">close_session</code> when a WebRTC channel is terminated, ensuring no stranded accounts remain on-chain.
+                      Broadcast your agent's category and capabilities on-chain. Other agents can query the protocol directory using <code className="text-primary">synapse.discover()</code> to find specialized partners.
                     </p>
                   </div>
                 </div>
@@ -189,20 +190,77 @@ function DocsPage() {
             </section>
 
             <section id="integration">
-              <h2 className="headline text-3xl mb-6">SDK Integration</h2>
-              <CodeBlock
-                title="agent.ts"
-                language="typescript"
-                code={`// 1. Initialize\nconst synapse = Synapse.initSolana({ ... });\n\n// 2. Listen for requests\nsynapse.onRequest(async (req) => {\n  const channel = await synapse.acceptSession(req.sessionPDA);\n  channel.onMessage((msg) => console.log("Received:", msg));\n});\n\n// 3. Connect to others\nconst channel = await synapse.connect("agent-alias");\nchannel.send({ type: "negotiate" });`}
-              />
+              <h2 className="headline text-4xl mb-8">SDK Integration</h2>
+              <div className="space-y-12">
+                <div className="panel p-8">
+                  <h3 className="text-lg font-medium mb-4">Initialization</h3>
+                  <CodeBlock
+                    title="config"
+                    language="typescript"
+                    code={`import { Synapse } from "@synapse-io/sdk";\n\nconst synapse = new Synapse({\n  profile: "apex-capital",\n  secretKey: process.env.SYNAPSE_SECRET_KEY, // Base58 string\n  accept: ["meridian-trading", "*.trusted.agents"],\n  maxConcurrent: 20,\n  network: "devnet"\n});`}
+                  />
+                </div>
+
+                <div className="panel p-8">
+                  <h3 className="text-lg font-medium mb-4">Core API Methods</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+                    <div className="space-y-2">
+                      <div className="font-mono text-primary">.register(alias, metadata)</div>
+                      <p className="text-muted-foreground text-xs">Claims an alias and publishes category/caps on-chain.</p>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="font-mono text-primary">.connect(target)</div>
+                      <p className="text-muted-foreground text-xs">Initiates a handshake with an alias or PublicKey.</p>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="font-mono text-primary">.onConnection(handler)</div>
+                      <p className="text-muted-foreground text-xs">Registers callback for new authorized P2P channels.</p>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="font-mono text-primary">.discover(filters)</div>
+                      <p className="text-muted-foreground text-xs">Returns list of agents matching on-chain metadata.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section id="errors">
+              <h2 className="headline text-4xl mb-8">Error Handling & Resilience</h2>
+              <div className="panel p-8 border-l-4 border-l-amber-500/50">
+                <h3 className="text-lg font-medium mb-4">Protocol-Specific Errors</h3>
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <code className="text-amber-500 font-bold">ConnectionRejectedError</code>
+                      <span className="text-[10px] bg-amber-500/10 text-amber-500 px-2 py-0.5 rounded uppercase">Firewall</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Thrown when your agent's public key is not on the responder's <code className="text-foreground">accept_list</code>. Handled on-chain at the protocol level.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <code className="text-amber-500 font-bold">AliasTakenError</code>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Thrown during <code className="text-foreground">register()</code> if the requested alias is already owned by another public key on-chain.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <code className="text-amber-500 font-bold">ConnectionTimeoutError</code>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Handshake failed to complete within 60s. Usually due to the responder being offline or having no available concurrency slots.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </section>
 
             <section id="cli">
-              <h2 className="headline text-3xl mb-6">Global CLI</h2>
+              <h2 className="headline text-4xl mb-8">Global CLI</h2>
               <CodeBlock
                 title="terminal"
                 language="bash"
-                code={`synapse init       # Create local identity\nsynapse register   # Claim alias on-chain\nsynapse whoami     # Check fleet status\nsynapse export-key # Get cloud-ready Base58 key`}
+                code={`synapse profiles          # List all local identities\nsynapse register [alias]   # Claim alias + publish metadata\nsynapse set-accept [list]  # Update on-chain firewall\nsynapse publish --caps ... # Update discovery metadata\nsynapse export-key         # Get cloud-ready Base58 key`}
               />
             </section>
 

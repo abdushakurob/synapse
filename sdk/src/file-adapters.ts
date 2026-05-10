@@ -1,4 +1,4 @@
-import { PublicKey } from "@solana/web3.js";
+import { PublicKey, Keypair } from "@solana/web3.js";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { RegistryAdapter } from "./registry";
 import { SignalingAdapter, SessionRecord } from "./signaling";
@@ -17,18 +17,68 @@ export class FileRegistryAdapter implements RegistryAdapter {
     return JSON.parse(readFileSync(this.filePath, "utf8"));
   }
 
-  async register(alias: string, pubkey: PublicKey): Promise<string> {
+  async register(alias: string, category: string = "general", capabilities: string[] = []): Promise<string> {
+    // For local file testing, we just update the metadata if the owner is already set
+    // via setOwner() in the test script.
     const data = this.read();
-    data[alias] = pubkey.toBase58();
+    if (!data[alias]) {
+      // If not set, generate a random but ON-CURVE pubkey
+      data[alias] = JSON.stringify({
+        owner: Keypair.generate().publicKey.toBase58(),
+        category,
+        capabilities
+      });
+    } else {
+      const entry = JSON.parse(data[alias]);
+      entry.category = category;
+      entry.capabilities = capabilities;
+      data[alias] = JSON.stringify(entry);
+    }
     writeFileSync(this.filePath, JSON.stringify(data, null, 2));
     return "local_file_sig_" + Math.random().toString(36).substring(7);
   }
 
+  // Test-only method to link alias to a specific keypair
+  setOwner(alias: string, owner: PublicKey) {
+    const data = this.read();
+    data[alias] = JSON.stringify({
+      owner: owner.toBase58(),
+      category: "general",
+      capabilities: []
+    });
+    writeFileSync(this.filePath, JSON.stringify(data, null, 2));
+  }
+
   async resolve(alias: string): Promise<PublicKey> {
     const data = this.read();
-    const val = data[alias];
-    if (!val) throw new Error(`Alias not found: ${alias}`);
-    return new PublicKey(val);
+    const entry = data[alias];
+    if (!entry) throw new Error(`Alias not found: ${alias}`);
+    const { owner } = JSON.parse(entry);
+    return new PublicKey(owner);
+  }
+
+  async configure(options: any): Promise<string> {
+    return "local_file_sig_" + Math.random().toString(36).substring(7);
+  }
+
+  async discover(filters: { category?: string; capabilities?: string[] }): Promise<any[]> {
+    const data = this.read();
+    return Object.keys(data).map(alias => {
+      const entry = JSON.parse(data[alias]);
+      return {
+        alias,
+        owner: new PublicKey(entry.owner),
+        category: entry.category,
+        capabilities: entry.capabilities,
+        isOpen: true
+      };
+    }).filter(a => {
+      if (filters.category && a.category !== filters.category) return false;
+      if (filters.capabilities) {
+        return filters.capabilities.every(c => a.capabilities.includes(c));
+      }
+      return true;
+    });
   }
 }
 
@@ -50,7 +100,7 @@ export class FileSignalingAdapter implements SignalingAdapter {
     writeFileSync(this.filePath, JSON.stringify(data, null, 2));
   }
 
-  async createSession(initiator: PublicKey, responder: PublicKey, encryptedOffer: Uint8Array): Promise<{ record: SessionRecord; signature: string }> {
+  async createSession(initiator: PublicKey, responder: PublicKey, encryptedOffer: Uint8Array, responderAlias: string): Promise<{ record: SessionRecord; signature: string }> {
     const createdAt = Date.now();
     const [sessionPDA] = PublicKey.findProgramAddressSync(
       [Buffer.from("session"), initiator.toBuffer(), responder.toBuffer(), Buffer.from(createdAt.toString())],
@@ -72,6 +122,30 @@ export class FileSignalingAdapter implements SignalingAdapter {
     this.write(data);
     return { record, signature: "local_file_sig_" + Math.random().toString(36).substring(7) };
   }
+
+  onNewSession(responder: PublicKey, callback: (session: SessionRecord) => void): void {
+    const responderStr = responder.toBase58();
+    const seen = new Set<string>();
+
+    // Initial poll to clear existing
+    const initialData = this.read();
+    Object.keys(initialData).forEach(k => seen.add(k));
+
+    // Polling loop
+    setInterval(() => {
+      const data = this.read();
+      Object.keys(data).forEach(key => {
+        if (!seen.has(key)) {
+          const record = this.parseRecord(data[key]);
+          if (record.responder.toBase58() === responderStr && record.status === "pending") {
+            seen.add(key);
+            callback(record);
+          }
+        }
+      });
+    }, 1000);
+  }
+
 
   async respondToSession(sessionPDA: PublicKey, encryptedAnswer: Uint8Array): Promise<string> {
     const data = this.read();
