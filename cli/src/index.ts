@@ -5,6 +5,7 @@ import { airdrop } from "./airdrop";
 import { balance } from "./balance";
 import { register } from "./register";
 import { whoami } from "./whoami";
+import { exportKey } from "./export-key";
 
 const program = new Command();
 
@@ -71,6 +72,18 @@ program
       await whoami();
     } catch (err: any) {
       console.error(`[CLI] whoami failed: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+program
+  .command("export-key")
+  .description("Export the secret key as a stringified array for Cloud/Vercel")
+  .action(async () => {
+    try {
+      await exportKey();
+    } catch (err: any) {
+      console.error(`[CLI] Export failed: ${err.message}`);
       process.exit(1);
     }
   });

@@ -2,41 +2,52 @@ import {
   Synapse,
   SolanaRegistryAdapter,
   SolanaSignalingAdapter,
+  IDL
 } from "@synapse-io/sdk";
 import { Program, AnchorProvider, Wallet } from "@coral-xyz/anchor";
-import { Connection, Keypair, PublicKey } from "@solana/web3.js";
-import idl from "../../sdk/src/idl.json";
+import { Connection, Keypair } from "@solana/web3.js";
 import { UIBridge } from "../shared/ui-bridge";
 import { config } from "./config";
 import { Message } from "../shared/schema";
 import { generateAgentResponse, ChatMessage } from "../shared/llm";
 import * as fs from "fs";
 import * as path from "path";
+import bs58 from "bs58";
 
-const PROGRAM_ID = new PublicKey("eCv677gAYX6ptLtJrPv9Rj8C4eGA4c9ecswRT5QJbeG");
 const RPC_URL = "https://api.devnet.solana.com";
 
 async function main() {
   const ui = new UIBridge(3002);
   console.log(`[${config.firmName}] Initializing on-chain...`);
 
-  // Load dev-wallet
-  const walletFile = path.resolve(__dirname, "../../dev-wallet.json");
-  const walletKeypair = Keypair.fromSecretKey(
-    Uint8Array.from(JSON.parse(fs.readFileSync(walletFile, "utf-8")))
-  );
+  // Load Identity: Check Environment Variable (Cloud) then fallback to JSON (Local)
+  let walletKeypair: Keypair;
+  if (process.env.SYNAPSE_SECRET_KEY) {
+    console.log(`[${config.firmName}] Loading identity from Environment Variable...`);
+    const keyStr = process.env.SYNAPSE_SECRET_KEY.trim();
+    if (keyStr.startsWith("[")) {
+      walletKeypair = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(keyStr)));
+    } else {
+      walletKeypair = Keypair.fromSecretKey(bs58.decode(keyStr));
+    }
+  } else {
+    const walletFile = path.resolve(__dirname, "../../dev-wallet-b.json");
+    if (!fs.existsSync(walletFile)) {
+      throw new Error("Identity not found. Set SYNAPSE_SECRET_KEY or create dev-wallet-b.json");
+    }
+    console.log(`[${config.firmName}] Loading identity from local dev-wallet-b.json...`);
+    walletKeypair = Keypair.fromSecretKey(
+      Uint8Array.from(JSON.parse(fs.readFileSync(walletFile, "utf-8")))
+    );
+  }
 
   const connection = new Connection(RPC_URL, "confirmed");
-  const provider = new AnchorProvider(connection, new Wallet(walletKeypair), {
-    commitment: "confirmed",
-  });
-  const program = new Program(idl as any, provider);
 
-  const synapse = new Synapse({
+  // High-level initialization
+  const synapse = Synapse.initSolana({
     profile: config.alias,
     keypair: walletKeypair,
-    registry: new SolanaRegistryAdapter(program),
-    signaling: new SolanaSignalingAdapter(program),
+    connection: connection,
     onTransaction: (signature, description) => {
       console.log(`[${config.firmName}] Transaction: ${description} (Sig: ${signature})`);
       ui.notify("blockchain_tx", { signature, description });

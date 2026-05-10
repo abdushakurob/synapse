@@ -7,7 +7,7 @@ const RPC_URL = "https://api.devnet.solana.com";
 export async function balance() {
   const walletPath = getWalletPath();
   if (!fs.existsSync(walletPath)) {
-    console.error(`[CLI] dev-wallet.json not found. Run 'synapse init' first.`);
+    console.error(`[CLI] Identity not found. Run 'synapse init' first.`);
     process.exit(1);
   }
 
@@ -17,8 +17,8 @@ export async function balance() {
 
   try {
     const bal = await connection.getBalance(keypair.publicKey);
-    console.log(`[CLI] Public Key: ${keypair.publicKey.toBase58()}`);
-    console.log(`[CLI] Balance: ${bal / LAMPORTS_PER_SOL} SOL`);
+    console.log(`[CLI] Identity: ${keypair.publicKey.toBase58()}`);
+    console.log(`[CLI] Balance: ${bal / LAMPORTS_PER_SOL} SOL (Devnet)`);
   } catch (err: any) {
     console.error(`[CLI] Failed to fetch balance: ${err.message}`);
     process.exit(1);

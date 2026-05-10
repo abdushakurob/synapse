@@ -1,4 +1,5 @@
 import { useAgentSocket } from "@/hooks/useAgentSocket";
+
 import { Nav } from "./Nav";
 import { Aurora } from "./Aurora";
 import { Panel } from "./Panel";
@@ -49,7 +50,7 @@ export function AgentDashboard({ firmName, wsPort, accentColor }: AgentDashboard
           <div className="flex flex-col items-end gap-2 mt-4 md:mt-0">
             <div className="flex items-center gap-3 font-mono text-sm bg-card/60 backdrop-blur border border-border px-4 py-2 rounded-full">
               <span className={`w-2 h-2 rounded-full ${isConnected ? "bg-emerald-500 animate-pulse" : "bg-red-500"}`}></span>
-              {isConnected ? "WEBSOCKET LIVE" : "DISCONNECTED"}
+              {isConnected ? "WEBSOCKET LIVE" : "CONNECTING..."}
             </div>
             {activeSession && (
                <div className="font-mono text-[10px] text-emerald-400 uppercase tracking-widest">

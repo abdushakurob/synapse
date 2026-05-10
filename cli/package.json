@@ -24,13 +24,14 @@
   "author": "Synapse Protocol",
   "license": "MIT",
   "dependencies": {
-    "@synapse-io/sdk": "^0.1.2",
     "@coral-xyz/anchor": "^0.30.1",
     "@solana/web3.js": "^1.87.0",
+    "@synapse-io/sdk": "^0.1.3",
+    "bs58": "^6.0.0",
     "commander": "^11.1.0"
   },
   "devDependencies": {
-    "typescript": "^5.0.0",
-    "@types/node": "^20.0.0"
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
   }
 }

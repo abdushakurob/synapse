@@ -9,7 +9,7 @@ const RPC_URL = "https://api.devnet.solana.com";
 export async function register(alias: string) {
   const walletPath = getWalletPath();
   if (!fs.existsSync(walletPath)) {
-    throw new Error(`dev-wallet.json not found. Run 'synapse init' first.`);
+    throw new Error(`Wallet not found. Run 'synapse init' first.`);
   }
 
   const secret = JSON.parse(fs.readFileSync(walletPath, "utf-8"));
@@ -28,5 +28,7 @@ export async function register(alias: string) {
     signaling: new SolanaSignalingAdapter(program as any),
   });
 
+  console.log(`[CLI] Registering "${alias}" for public key: ${keypair.publicKey.toBase58()}`);
   await synapse.register(alias);
+  console.log(`[CLI] Successfully registered alias "${alias}" on Solana.`);
 }

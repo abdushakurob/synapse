@@ -7,7 +7,7 @@ const RPC_URL = "https://api.devnet.solana.com";
 export async function airdrop() {
   const walletPath = getWalletPath();
   if (!fs.existsSync(walletPath)) {
-    console.error(`[CLI] dev-wallet.json not found. Run 'synapse init' first.`);
+    console.error(`[CLI] Identity not found. Run 'synapse init' first.`);
     process.exit(1);
   }
 
@@ -15,15 +15,10 @@ export async function airdrop() {
   const keypair = Keypair.fromSecretKey(Uint8Array.from(secret));
   const connection = new Connection(RPC_URL, "confirmed");
 
-  console.log(`[CLI] Requesting 2 SOL airdrop to ${keypair.publicKey.toBase58()}...`);
+  console.log(`[CLI] Requesting Devnet SOL to ${keypair.publicKey.toBase58()}...`);
   try {
     const signature = await connection.requestAirdrop(keypair.publicKey, 2 * LAMPORTS_PER_SOL);
-    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
-    await connection.confirmTransaction({
-      signature,
-      blockhash,
-      lastValidBlockHeight
-    });
+    await connection.confirmTransaction(signature);
     console.log(`[CLI] Airdrop successful! Tx: ${signature}`);
   } catch (err: any) {
     console.error(`[CLI] Airdrop failed: ${err.message}`);

@@ -1,5 +1,6 @@
 import zlib from "zlib";
-import { Keypair, PublicKey } from "@solana/web3.js";
+import { Keypair, PublicKey, Connection } from "@solana/web3.js";
+import { Program, AnchorProvider, Wallet } from "@coral-xyz/anchor";
 import { Channel } from "./channel";
 import { decrypt, ed25519SecretToCurve25519, ed25519ToCurve25519, encrypt } from "./crypto";
 import { InMemoryRegistryAdapter, RegistryAdapter, SolanaRegistryAdapter } from "./registry";
@@ -7,6 +8,7 @@ import { InMemorySignalingAdapter, SessionRecord, SignalingAdapter, SolanaSignal
 import { FileRegistryAdapter, FileSignalingAdapter } from "./file-adapters";
 import { ManagedSession, SessionManager } from "./session-manager";
 import { completeConnection, ConnectionData, createAnswer, createOffer } from "./webrtc";
+import IDL from "./idl.json";
 
 export class ConnectionTimeoutError extends Error {
   constructor(message: string) {
@@ -47,6 +49,31 @@ export class Synapse {
 
     this.sessions = new SessionManager({
       maxConcurrent: options.maxConcurrent ?? 10,
+    });
+  }
+
+  /**
+   * Convenience factory to initialize a Synapse instance for Solana Devnet.
+   */
+  static initSolana(options: {
+    profile: string;
+    keypair: Keypair;
+    connection: Connection;
+    onTransaction?: (signature: string, description: string) => void;
+  }): Synapse {
+    const provider = new AnchorProvider(
+      options.connection,
+      new Wallet(options.keypair),
+      { commitment: "confirmed" }
+    );
+    const program = new Program(IDL as any, provider);
+
+    return new Synapse({
+      profile: options.profile,
+      keypair: options.keypair,
+      registry: new SolanaRegistryAdapter(program),
+      signaling: new SolanaSignalingAdapter(program),
+      onTransaction: options.onTransaction,
     });
   }
 
