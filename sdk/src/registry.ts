@@ -2,19 +2,7 @@ import { PublicKey } from "@solana/web3.js";
 import { Program, Idl } from "@coral-xyz/anchor";
 import idl from "./idl.json";
 
-export class AgentNotFoundError extends Error {
-  constructor(alias: string) {
-    super(`[Registry] Agent not found: ${alias}`);
-    this.name = "AgentNotFoundError";
-  }
-}
-
-export class AliasTakenError extends Error {
-  constructor(alias: string) {
-    super(`[Registry] Alias already registered: ${alias}`);
-    this.name = "AliasTakenError";
-  }
-}
+import { AgentNotFoundError, AliasTakenError } from "./errors";
 
 export interface RegistryAdapter {
   register(alias: string, category: string, capabilities: string[]): Promise<string | void>;
@@ -69,7 +57,8 @@ export class SolanaRegistryAdapter implements RegistryAdapter {
   }): Promise<string> {
     // We need the alias to find the registry. For now, let's assume we find it by scanning the user's accounts
     // or passing it in. A better way is to have the SDK track the registered alias.
-    const alias = await this.getAliasForOwner(this.program.provider.publicKey as PublicKey);
+    const alias = await this.resolveAliasByPubkey(this.program.provider.publicKey as PublicKey);
+    if (!alias) throw new Error("No agent registered for this owner");
     const pda = await this.getPDA(alias);
     
     return await (this.program.methods as any)
@@ -123,11 +112,13 @@ export class SolanaRegistryAdapter implements RegistryAdapter {
     }
   }
 
-  private async getAliasForOwner(owner: PublicKey): Promise<string> {
+  async resolveAliasByPubkey(owner: PublicKey): Promise<string> {
     const accounts = await (this.program.account as any).agentRegistry.all([
-      { memcmp: { offset: 8 + 4 + 32, bytes: owner.toBase58() } }
+      { memcmp: { offset: 8, bytes: owner.toBase58() } }
     ]);
-    if (accounts.length === 0) throw new Error("No agent registered for this owner");
+    if (accounts.length === 0) return "";
     return accounts[0].account.alias;
   }
 }
+
+export { SolanaRegistryAdapter as Registry };

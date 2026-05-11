@@ -13,7 +13,6 @@ export class UIBridge {
     this.wss = new WebSocketServer({ port });
     this.wss.on("connection", (ws) => {
       this.clients.add(ws);
-      console.log(`[UI Bridge] Dashboard connected on port ${port}`);
       
       // Send buffered state and logs to new client
       for (const [event, data] of Object.entries(this.state)) {
@@ -36,7 +35,7 @@ export class UIBridge {
 
       ws.on("close", () => this.clients.delete(ws));
     });
-    console.log(`[UI Bridge] Listening on port ${port}`);
+    console.log(`[UI Bridge] Live on port ${port}`);
   }
 
   onMessage(handler: (msg: any) => void) {
@@ -48,15 +47,18 @@ export class UIBridge {
     const payload = JSON.stringify(payloadObj);
 
     // Persist critical state
-    if (["session_opened", "portfolio_updated", "active_sessions"].includes(event)) {
-      console.log(`[UI Bridge] Persisting state for event: ${event}`);
+    if (["session_opened", "portfolio_updated", "active_sessions", "phase_change", "deal_update"].includes(event)) {
       this.state[event] = data;
     }
     
-    // Buffer logs and transactions
-    if (["message_sent", "message_received", "reasoning", "blockchain_tx", "status"].includes(event)) {
+    // Buffer logs, analysis, crypto events, and transactions
+    if ([
+      "message_sent", "message_received", "reasoning", "blockchain_tx",
+      "status", "internal_analysis", "crypto_event", "phase_change",
+      "trade_executed", "price_update"
+    ].includes(event)) {
       this.logBuffer.push(payloadObj);
-      if (this.logBuffer.length > 50) this.logBuffer.shift();
+      if (this.logBuffer.length > 200) this.logBuffer.shift();
     }
 
     for (const client of this.clients) {

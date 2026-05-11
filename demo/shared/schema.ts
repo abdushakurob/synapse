@@ -3,6 +3,8 @@ export type Message =
   | { type: "quote"; asset: string; quantity: number; price: number; expiresIn: number }
   | { type: "counter"; asset: string; quantity: number; price: number }
   | { type: "execution"; asset: string; quantity: number; price: number; agreed: true }
+  | { type: "execute"; asset: string; quantity: number; price: number; agreed?: true }
+  | { type: "accept"; asset: string; quantity: number; price: number; agreed?: true }
   | { type: "reject"; reason: string }
   | { type: "status"; message: string };
 

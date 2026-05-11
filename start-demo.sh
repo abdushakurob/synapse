@@ -7,14 +7,14 @@ set -e
 pkill -f ts-node || true
 pkill -f vite || true
 
-echo "---------------------------------------------------------"
-echo "🚀 SYNAPSE PROTOCOL: DECENTRALIZED TRADING DEMO"
-echo "---------------------------------------------------------"
+echo "-----------------------------------------------------------"
+echo "SYNAPSE PROTOCOL: AUTONOMOUS AGENT DEMO"
+echo "-----------------------------------------------------------"
 
-# 1. Build and Link SDK
-echo "[1/4] Preparing SDK and CLI..."
+echo "[1/3] Preparing Environment..."
 (cd sdk && npm run build)
-(cd cli && npm run build)
+(cd web && npm run dev) &
+WEB_PID=$!
 
 # 2. Setup Identities
 if [ ! -f "dev-wallet-a.json" ]; then
@@ -30,29 +30,34 @@ if [ ! -f "dev-wallet-b.json" ]; then
 fi
 
 # 3. Start Responder (Agent B)
-echo "[2/4] Starting Meridian Trading (Responder) on Port 3002..."
-(cd demo && npm run agent-b > agent-b.log 2>&1) &
+echo "[2/3] Starting Meridian Trading (Responder)..."
+# Use a stable alias to avoid rent leakage and discovery errors
+export AGENT_ALIAS="meridian-trading-dev-stable"
+(cd demo && AGENT_ALIAS=$AGENT_ALIAS npm run agent-b 2>&1 | tee agent-b.log) &
 B_PID=$!
 
-# 4. Start Web Dashboard
-echo "[3/4] Starting Web Control Center..."
-(cd web && npm run dev > web.log 2>&1) &
-WEB_PID=$!
-
-echo "Waiting for agents to synchronize with Solana Devnet..."
-sleep 10
-
-# 5. Start Initiator (Agent A)
-echo "[4/4] Starting Apex Capital (Initiator) on Port 3001..."
 echo ""
-echo "👉 OPEN THE DASHBOARD: http://localhost:5173/agent-a"
-echo "👉 OPEN THE RESPONDER: http://localhost:5173/agent-b"
+echo "Waiting for Agent B to boot and register on-chain ($AGENT_ALIAS)..."
+sleep 15
+
+# 4. Start Initiator (Agent A)
+echo "[3/3] Starting Apex Capital (Initiator)..."
 echo ""
-echo "Press 'Initiate Connection' on the Apex Capital dashboard to start."
-echo "---------------------------------------------------------"
+echo "-----------------------------------------------------------"
+echo "  Both agents are now autonomous."
+echo "  Open the dashboards to watch live:"
+echo ""
+echo "  Apex Capital:     demo/agent-a/ui/index.html"
+echo "  Meridian Trading: demo/agent-b/ui/index.html"
+echo ""
+echo "  Web dashboard:"
+echo "  - http://localhost:8080/agent-a"
+echo "  - http://localhost:8080/agent-b"
+echo "-----------------------------------------------------------"
+echo ""
 
 # Start Agent A in foreground
-cd demo && npm run agent-a
+cd demo && RESPONDER_ALIAS=$AGENT_ALIAS npm run agent-a
 
 # Cleanup on exit
 function cleanup {

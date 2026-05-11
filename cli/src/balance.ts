@@ -1,29 +1,52 @@
 import { Connection, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import * as fs from "fs";
-import { getProfilePath } from "./utils";
+import { resolveKeypair } from "./utils";
+import { printKv, parseOutputMode, printJson } from "./cli-ui";
+import { selectWallet } from "./cli-interactive";
 
 const RPC_URL = "https://api.devnet.solana.com";
 
-export async function balance(options: { profile?: string }) {
-  const profile = options.profile || "default";
-  const walletPath = getProfilePath(profile);
+export async function balance(options: { profile?: string, file?: string, json?: boolean }) {
+  const output = parseOutputMode(options.json);
+  
+  let walletPath: string;
+  let label: string;
+  let keypair: Keypair;
 
-  if (!fs.existsSync(walletPath)) {
-    console.error(`[CLI] Profile '${profile}' not found. Run 'synapse init --profile ${profile}' first.`);
-    process.exit(1);
+  if (!options.profile && !options.file && output === "text") {
+    const selected = await selectWallet("Check balance for");
+    walletPath = selected.path;
+    label = selected.label;
+    const secret = JSON.parse(fs.readFileSync(walletPath, "utf-8"));
+    keypair = Keypair.fromSecretKey(Uint8Array.from(secret));
+  } else {
+    const resolved = resolveKeypair({ profile: options.profile, file: options.file });
+    walletPath = resolved.walletPath;
+    label = resolved.label;
+    keypair = resolved.keypair;
   }
 
-  const secret = JSON.parse(fs.readFileSync(walletPath, "utf-8"));
-  const keypair = Keypair.fromSecretKey(Uint8Array.from(secret));
   const connection = new Connection(RPC_URL, "confirmed");
 
   try {
-    const bal = await connection.getBalance(keypair.publicKey);
-    console.log(`[CLI] Profile:  ${profile}`);
-    console.log(`[CLI] Identity: ${keypair.publicKey.toBase58()}`);
-    console.log(`[CLI] Balance:  ${bal / LAMPORTS_PER_SOL} SOL (Devnet)`);
+    const balance = await connection.getBalance(keypair.publicKey);
+    
+    if (output === "json") {
+      printJson({
+        ok: true,
+        network: "devnet",
+        identity: label,
+        publicKey: keypair.publicKey.toBase58(),
+        balanceSol: balance / LAMPORTS_PER_SOL
+      });
+      return;
+    }
+
+    printKv(`Balance for ${label}`, [
+      ["Public Key", keypair.publicKey.toBase58()],
+      ["Balance", `${(balance / LAMPORTS_PER_SOL).toFixed(4)} SOL`],
+    ]);
   } catch (err: any) {
     console.error(`[CLI] Failed to fetch balance: ${err.message}`);
-    process.exit(1);
   }
 }

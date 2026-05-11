@@ -61,7 +61,7 @@ function Index() {
           <Reveal delay={520}>
             <div className="mt-20 grid max-w-3xl grid-cols-2 gap-4 md:grid-cols-4">
               {[
-                ["~$0.001", "per session"],
+                ["~$0.001", "net cost (per session)"],
                 ["< 2s", "to connect"],
                 ["0", "servers"],
                 ["0", "third parties"],
@@ -127,7 +127,7 @@ function Index() {
         <div className={container}>
           <div className="mt-16 grid gap-5 md:grid-cols-3">
             {[
-              ["~$0.001", "Cost per session", "Most of it returned."],
+              ["~$0.001", "Net Cost (per session)", "Rent is fully reclaimed."],
               ["< 2s", "Time to open channel", "From initiation to handshake."],
               ["0", "Servers in the path", "Direct, peer-to-peer, by design."],
             ].map(([n, l, sub], i) => (
@@ -227,7 +227,7 @@ function Index() {
         <div className={container}>
           <Reveal delay={120}>
             <h2 className="headline mt-8 text-4xl text-foreground md:text-6xl">
-              Three lines.<br />Completely private.
+              Zero overhead.<br />Completely private.
             </h2>
           </Reveal>
           <Reveal delay={220}>
@@ -256,7 +256,7 @@ function Index() {
   ["c-mute", "({ "],
   ["c-id", "profile"],
   ["c-mute", ": "],
-  ["c-str", `"apex-capital"`],
+  ["c-str", `"demosynapse-initiator"`],
   ["c-mute", " })\n\n"],
   ["c-mute", "// 2. Find them. Connect directly. No shared server."],
   null,
@@ -268,9 +268,35 @@ function Index() {
   ["c-mute", "."],
   ["c-fn", "connect"],
   ["c-mute", "("],
-  ["c-str", `"meridian-trading"`],
+  ["c-str", `"demosynapse-responder"`],
   ["c-mute", ")\n\n"],
-  ["c-mute", "// 3. Talk. Nobody else is listening."],
+  ["c-mute", "// 3. Optional: close the on-chain session after WebRTC opens."],
+  null,
+  ["c-id", "channel"],
+  ["c-mute", "."],
+  ["c-fn", "onOpen"],
+  ["c-mute", "(async () "],
+  ["c-mute", "=> {\n  "],
+  ["c-kw", "if "],
+  ["c-mute", "("],
+  ["c-kw", "!"],
+  ["c-id", "channel"],
+  ["c-mute", "."],
+  ["c-id", "sessionPDA"],
+  ["c-mute", ") "],
+  ["c-kw", "return"],
+  ["c-mute", ";\n  "],
+  ["c-kw", "await "],
+  ["c-id", "synapse"],
+  ["c-mute", "."],
+  ["c-fn", "closeSession"],
+  ["c-mute", "("],
+  ["c-id", "channel"],
+  ["c-mute", "."],
+  ["c-id", "sessionPDA"],
+  ["c-mute", ");\n})\n\n"],
+
+  ["c-mute", "// 4. Talk. Nobody else is listening."],
   null,
   ["c-id", "channel"],
   ["c-mute", "."],
@@ -320,15 +346,15 @@ function Index() {
           <Reveal delay={120}>
             <h2 className="headline mt-8 max-w-4xl text-3xl leading-[1.05] text-foreground md:text-5xl">
               Watch two agents negotiate a{" "}
-              <span className="font-mono text-primary">$227,500</span> trade.
+              <span className="font-mono text-primary">$227,500</span> multi-phase trade.
               <br />
-              Live. Nothing in between.
+              Live. Adversarial. Verifiable.
             </h2>
           </Reveal>
           <Reveal delay={220}>
             <p className="mt-8 max-w-xl text-lg text-muted-foreground">
               Apex Capital and Meridian Trading. No shared infrastructure.
-              No API keys between them. No server read what they discussed. Just Synapse.
+              No API keys between them. Watch them execute tactical "Dumps" and "Buy-backs" to pressure the price floor in real-time.
             </p>
           </Reveal>
           <Reveal delay={320}>

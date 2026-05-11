@@ -1,6 +1,7 @@
 import zlib from "zlib";
 import { Keypair, PublicKey, Connection } from "@solana/web3.js";
 import { Program, AnchorProvider, Wallet, BN } from "@coral-xyz/anchor";
+import bs58 from "bs58";
 import { Channel } from "./channel";
 import { decrypt, ed25519SecretToCurve25519, ed25519ToCurve25519, encrypt } from "./crypto";
 import { RegistryAdapter, SolanaRegistryAdapter } from "./registry";
@@ -9,29 +10,29 @@ import { ManagedSession, SessionManager } from "./session-manager";
 import { completeConnection, ConnectionData, createAnswer, createOffer } from "./webrtc";
 import IDL from "./idl.json";
 
-export class ConnectionTimeoutError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "ConnectionTimeoutError";
-  }
-}
-
-export class ConnectionRejectedError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "ConnectionRejectedError";
-  }
-}
+import { ConnectionTimeoutError, ConnectionRejectedError } from "./errors";
 
 interface SynapseOptions {
   profile: string;
   keypair?: Keypair;
-  secretKey?: string; // Base58
+  /**
+   * Secret key for the agent identity.
+   *
+   * Supported formats:
+   * - Base58 string (as exported by `synapse export-key --format base58`)
+   * - JSON array string of 64 bytes (as written by `synapse init` profile files)
+   */
+  secretKey?: string;
   registry?: RegistryAdapter;
   signaling?: SignalingAdapter;
   maxConcurrent?: number;
   accept?: string[];
-  network?: string;
+  /**
+   * Network selection.
+   *
+   * Synapse is devnet-only in this repo (per `AGENTS.md`).
+   */
+  network?: "devnet";
   onTransaction?: (signature: string, description: string) => void;
 }
 
@@ -55,8 +56,7 @@ export class Synapse {
     if (options.keypair) {
       this.keypair = options.keypair;
     } else if (options.secretKey) {
-      const bs58 = require("bs58");
-      this.keypair = Keypair.fromSecretKey(bs58.decode(options.secretKey));
+      this.keypair = Keypair.fromSecretKey(parseSecretKey(options.secretKey));
     } else {
       this.keypair = Keypair.generate();
     }
@@ -64,7 +64,10 @@ export class Synapse {
     // Default to Solana if no adapters provided
     if (!options.registry || !options.signaling) {
       const network = options.network || "devnet";
-      const rpc = network === "devnet" ? "https://api.devnet.solana.com" : "https://api.mainnet-beta.solana.com";
+      if (network !== "devnet") {
+        throw new Error(`[SDK] Unsupported network '${network}'. This repository is devnet-only.`);
+      }
+      const rpc = "https://api.devnet.solana.com";
       const connection = new Connection(rpc, "confirmed");
       const provider = new AnchorProvider(connection, new Wallet(this.keypair), { commitment: "confirmed" });
       const program = new Program(IDL as any, provider);
@@ -78,12 +81,25 @@ export class Synapse {
     this.onTransaction = options.onTransaction;
     this.sessions = new SessionManager({
       maxConcurrent: options.maxConcurrent ?? 10,
+      acceptQueuedSession: async (sessionPDA) => {
+        await this.acceptSession(sessionPDA.toBase58());
+      },
+      isQueuedSessionExpired: async (queued) => {
+        const record = await this.signaling.getSession(queued.sessionPDA);
+        if (!record) return true;
+        return Date.now() > record.expiresAt;
+      },
     });
 
     if (options.accept) {
       this.acceptList = options.accept;
       this.isOpen = options.accept.includes("*");
-      this.setAcceptList(options.accept).catch(console.error);
+      this.setAcceptList(options.accept).catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        console.warn(
+          `[SDK] Accept list applied locally, but on-chain update failed: ${message}`
+        );
+      });
     }
   }
 
@@ -139,6 +155,14 @@ export class Synapse {
     return await this.registry.discover(filters);
   }
 
+  async closeSession(sessionPDA: string | PublicKey): Promise<void> {
+    const pda = typeof sessionPDA === "string" ? new PublicKey(sessionPDA) : sessionPDA;
+    const signature = await this.signaling.closeSession(pda);
+    if (this.onTransaction) {
+      this.onTransaction(signature, "Closed Session & Reclaimed Rent");
+    }
+  }
+
   onConnection(handler: ConnectionHandler): void {
     this.connectionHandler = handler;
     this.startListening();
@@ -150,7 +174,7 @@ export class Synapse {
       this.signaling.onNewSession(this.keypair.publicKey, async (session) => {
         try {
           if (!this.sessions.get(session.sessionPDA.toBase58())) {
-            await this.acceptSession(session.sessionPDA.toBase58());
+            await this.sessions.handleInbound(session.sessionPDA, session.encryptedOffer);
           }
         } catch (err: any) {
           if (err instanceof ConnectionRejectedError) {
@@ -207,6 +231,7 @@ export class Synapse {
       const answer = decryptConnectionData(encryptedAnswer, this.keypair, responder);
       const peer = await completeConnection(offer.peer, answer);
       const channel = new Channel(peer);
+      channel.sessionPDA = record.sessionPDA.toBase58();
       await this.sessions.registerOutbound(record.sessionPDA, channel, responder.toBase58());
       return channel;
     } catch (err: any) {
@@ -253,6 +278,7 @@ export class Synapse {
     }
     
     const channel = new Channel(answer.peer);
+    channel.sessionPDA = record.sessionPDA.toBase58();
     await this.sessions.registerInbound(record.sessionPDA, channel, initiator.toBase58());
     
     if (this.connectionHandler) {
@@ -278,11 +304,33 @@ function decryptConnectionData(encrypted: Uint8Array, recipient: Keypair, sender
   return JSON.parse(decompressed.toString("utf-8")) as ConnectionData;
 }
 
+function parseSecretKey(secretKey: string): Uint8Array {
+  const trimmed = secretKey.trim();
+  if (trimmed.startsWith("[")) {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (!Array.isArray(parsed)) {
+      throw new Error("[SDK] secretKey JSON must be an array of 64 numbers.");
+    }
+    const bytes = Uint8Array.from(parsed as number[]);
+    if (bytes.length !== 64) {
+      throw new Error(`[SDK] secretKey JSON must contain 64 numbers (got ${bytes.length}).`);
+    }
+    return bytes;
+  }
+  const decoded = bs58.decode(trimmed);
+  if (decoded.length !== 64) {
+    throw new Error(`[SDK] secretKey base58 must decode to 64 bytes (got ${decoded.length}).`);
+  }
+  return decoded;
+}
+
 export { Channel } from "./channel";
 export { generateKeypair, loadKeypair, saveKeypair } from "./keypair";
-export { RegistryAdapter, SolanaRegistryAdapter } from "./registry";
+export { RegistryAdapter, SolanaRegistryAdapter, Registry } from "./registry";
 export { SolanaSignalingAdapter, SessionRecord } from "./signaling";
+export { ConnectionTimeoutError, ConnectionRejectedError, AgentNotFoundError, AliasTakenError } from "./errors";
 export { SessionManager, ManagedSession } from "./session-manager";
 export { completeConnection, createAnswer, createOffer } from "./webrtc";
+export { startLiquidityService, maintainLiquidity } from "./liquidity";
 export { default as IDL } from "./idl.json";
 

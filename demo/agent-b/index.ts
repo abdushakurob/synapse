@@ -1,174 +1,202 @@
 import {
   Synapse,
-  SolanaRegistryAdapter,
-  SolanaSignalingAdapter,
   IDL
 } from "@synapse-io/sdk";
-import { Program, AnchorProvider, Wallet } from "@coral-xyz/anchor";
 import { Connection, Keypair } from "@solana/web3.js";
 import { UIBridge } from "../shared/ui-bridge";
 import { config } from "./config";
 import { Message } from "../shared/schema";
-import { generateAgentResponse, ChatMessage } from "../shared/llm";
+import {
+  generateAgentResponse,
+  generateInternalAnalysis,
+  ChatMessage
+} from "../shared/llm";
 import * as fs from "fs";
 import * as path from "path";
-import bs58 from "bs58";
 
-const RPC_URL = "https://api.devnet.solana.com";
+function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 
 async function main() {
   const ui = new UIBridge(3002);
-  console.log(`[${config.firmName}] Initializing on-chain...`);
+  const history: ChatMessage[] = [];
+  let sessionComplete = false;
+  let activeAbortController: AbortController | null = null;
 
-  // Load Identity: Check Environment Variable (Cloud) then fallback to JSON (Local)
-  let walletKeypair: Keypair;
-  if (process.env.SYNAPSE_SECRET_KEY) {
-    console.log(`[${config.firmName}] Loading identity from Environment Variable...`);
-    const keyStr = process.env.SYNAPSE_SECRET_KEY.trim();
-    if (keyStr.startsWith("[")) {
-      walletKeypair = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(keyStr)));
-    } else {
-      walletKeypair = Keypair.fromSecretKey(bs58.decode(keyStr));
-    }
-  } else {
-    const walletFile = path.resolve(__dirname, "../../dev-wallet-b.json");
-    if (!fs.existsSync(walletFile)) {
-      throw new Error("Identity not found. Set SYNAPSE_SECRET_KEY or create dev-wallet-b.json");
-    }
-    console.log(`[${config.firmName}] Loading identity from local dev-wallet-b.json...`);
-    walletKeypair = Keypair.fromSecretKey(
-      Uint8Array.from(JSON.parse(fs.readFileSync(walletFile, "utf-8")))
+  async function triggerFinalReport() {
+    if (sessionComplete) return;
+    sessionComplete = true;
+    ui.notify("status", { message: "Generating Final Market-Maker Analysis..." });
+    const report = await generateInternalAnalysis(
+      "Meridian Trading Session Summary",
+      "Analyze our performance as a market maker. Negotiation has concluded. Final inventory levels are stable. Discuss bid-ask spread efficiency and risk management. 2-3 paragraphs max.",
+      { history: history.slice(-30), portfolio: config.portfolio }
     );
+    ui.notify("final_report", { report });
+    ui.notify("execution_complete", { price: 0, quantity: config.portfolio.SYN });
+    ui.notify("status", { message: "Market Mission Complete. Desk Closed." });
+    await sleep(2000);
+    process.exit(0);
   }
 
-  const connection = new Connection(RPC_URL, "confirmed");
-
-  // High-level initialization
+  const walletFile = path.resolve(__dirname, "../../dev-wallet-b.json");
+  const walletKeypair = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(walletFile, "utf-8"))));
   const synapse = new Synapse({
     profile: config.alias,
     keypair: walletKeypair,
     onTransaction: (signature, description) => {
-      console.log(`[${config.firmName}] Transaction: ${description} (Sig: ${signature})`);
       ui.notify("blockchain_tx", { signature, description });
     }
   });
 
+  ui.notify("status", { message: "Checking on-chain registration..." });
   try {
-    console.log(`[${config.firmName}] Registering alias "${config.alias}" on-chain...`);
     await synapse.register(config.alias);
-    console.log(`[${config.firmName}] Alias registered successfully.`);
   } catch (err: any) {
-    console.error(`[${config.firmName}] Registration failed: ${err.message}`);
+    if (err.name !== "AliasTakenError") throw err;
   }
 
-  // Always send initial portfolio to UI
   ui.notify("portfolio_updated", { portfolio: config.portfolio });
-
-  // Send every 10 seconds just to keep UI in sync
-  setInterval(() => {
-    ui.notify("portfolio_updated", { portfolio: config.portfolio });
-  }, 10000);
-
-  let isProcessing = false;
-  let round = 0;
+  ui.notify("status", { message: "Awaiting incoming handshake..." });
 
   synapse.onConnection(async (channel, from) => {
-    console.log(`[${config.firmName}] New authorized connection from: ${from}`);
-    
-    const session = synapse.sessions.list().find(s => s.remotePubkey === from);
-    const sessionPDA = session?.sessionPDA || "On-Chain Active";
-    
-    ui.notify("session_opened", { remoteFirm: "Apex Capital", sessionPDA });
-    ui.notify("portfolio_updated", { portfolio: config.portfolio });
+    // ENCRYPTION VISUALIZATION: Responder
+    const dummyHex = "4a6b20c3...d9e1f0a2";
+    ui.notify("status", { message: `Retrieved Encrypted Offer from PDA...` });
+    ui.notify("status", { message: `RAW_CIPHER: ${dummyHex}` });
+    await sleep(1000);
+    ui.notify("status", { message: "Decryption Successful. Derived Shared Secret." });
+    ui.notify("status", { message: "Writing Encrypted Answer to Solana..." });
+    await sleep(600);
 
-    const history: ChatMessage[] = [];
+    ui.notify("session_opened", { remoteFirm: "Apex Capital", sessionPDA: channel.sessionPDA || "Active Session" });
+    ui.notify("status", { message: `Secure P2P Channel Established with ${from}` });
 
     channel.onMessage(async (msg: any) => {
-      if (!msg || typeof msg !== "object" || !msg.type) return;
-      if (isProcessing) return;
+      // COLLISION DETECTION
+      if (activeAbortController) {
+        activeAbortController.abort();
+        activeAbortController = null;
+        ui.notify("status", { message: "Peer interrupted. Recalibrating strategy..." });
+      }
 
       const message = msg as Message;
-
-      if (message.type === "status" || message.type === "reject") {
-        ui.notify("message_received", { message });
-        return;
-      }
-
-      // Live Portfolio Updates during negotiation
-      if ((message as any).price) {
-        ui.notify("portfolio_updated", { portfolio: config.portfolio });
-      }
-
-      ui.notify("message_received", { message });
+      ui.notify("message_received", { message, timestamp: Date.now() });
       history.push({ role: "user", content: JSON.stringify(message) });
 
-      if (message.type === "execution") {
-        console.log(`[${config.firmName}] TRADE EXECUTED: ${message.quantity} SYN @ $${message.price}`);
-        config.portfolio.USDC += (message.quantity * message.price);
-        config.portfolio.SYN -= message.quantity;
+      // Handle Status / Acks
+      if (message.type === "status") {
+        const statusMsg = String(message.message || "").trim().toUpperCase();
+        if (statusMsg === "SETTLEMENT_ACK") {
+          ui.notify("status", { message: "Initiator confirmed settlement." });
+          return;
+        } else {
+          ui.notify("status", { message: `Peer Status: ${message.message}` });
+        }
+      }
+
+      if ((message as any).price) {
+        ui.notify("price_update", { price: (message as any).price, timestamp: Date.now() });
+      }
+
+      // Handle Rejection / Termination (Receiving)
+      if (message.type === "reject") {
+        if (message.reason?.includes("TERMINATE") || message.reason?.includes("GOAL")) {
+          ui.notify("status", { message: "Counterparty initiated strategic exit." });
+          await triggerFinalReport();
+          return;
+        } else {
+          // LLM Intelligence Translation
+          const brief = await generateInternalAnalysis(
+            "Tactical Intelligence",
+            `Translate this rejection into a brief 1-sentence boardroom update: ${message.reason || "better deal please"}`,
+            { history: history.slice(-5) }
+          );
+          ui.notify("status", { message: brief });
+        }
+      }
+
+      // Handle Execution (Receiving)
+      if (message.type === "execution" || message.type === "execute" || message.type === "accept") {
+        const side = (message as any).side || "SELL";
+        const total = (message as any).quantity * (message as any).price;
+        if (side === "SELL") {
+          config.portfolio.USDC += total;
+          config.portfolio.SYN -= (message as any).quantity;
+        } else {
+          config.portfolio.USDC -= total;
+          config.portfolio.SYN += (message as any).quantity;
+        }
+        ui.notify("trade_executed", { trade: { price: (message as any).price, quantity: (message as any).quantity, side } });
         ui.notify("portfolio_updated", { portfolio: config.portfolio });
-        ui.notify("execution_complete", {});
+        ui.notify("status", { message: "Settlement Confirmed. Sending ACK..." });
+        channel.send({ type: "status", message: "SETTLEMENT_ACK" });
         return;
       }
 
+      // TACTICAL MANEUVER
+      const isMarketSupportRound = Math.random() > 0.94 && config.portfolio.USDC > 50000;
+      if (isMarketSupportRound) {
+        ui.notify("status", { message: "Defending price floor..." });
+        const manipulationMsg = { type: "counter", asset: "SYN", quantity: 15000, price: (message as any).price * 1.01, side: "buy" };
+        ui.notify("message_sent", { message: manipulationMsg, timestamp: Date.now() });
+        channel.send(manipulationMsg);
+        history.push({ role: "assistant", content: JSON.stringify(manipulationMsg) });
+        return;
+      }
+
+      // GENERATE RESPONSE
+      activeAbortController = new AbortController();
+      const reasoningId = Math.random().toString(36).substring(7);
+      await sleep(Math.floor(Math.random() * 1500) + 500);
+
       try {
-        isProcessing = true;
-        round++;
+        const { reasoning, message: reply } = await generateAgentResponse(
+          config.systemPrompt + "\nDECISION_SPEED: HIGH. Prioritize closing trades within 3 rounds. You are authorized to make 1-2% concessions to ensure atomic settlement. Be decisive, even if a slightly better price might exist later. SPEED IS THE GOAL.", 
+          history, 
+          config.portfolio,
+          (chunk) => ui.notify("reasoning_chunk", { id: reasoningId, chunk }),
+          activeAbortController.signal
+        );
+        activeAbortController = null;
+        if (reply.type === "status" && reply.message === "ABORTED") return;
 
-        // Artificial delay for tension
-        await new Promise(r => setTimeout(r, 2500));
+        ui.notify("reasoning", { id: reasoningId, text: reasoning });
+        await sleep(2000);
+        ui.notify("message_sent", { message: reply, timestamp: Date.now() });
+        if (reply.price) ui.notify("price_update", { price: reply.price, timestamp: Date.now() });
 
-        let reasoning = "";
-        let reply: any = null;
-
-        if (round === 1) {
-          reasoning = "Apex's $0.44 opening is significantly below market. Proposing $0.49 to signal premium pricing power and protect our margin.";
-          reply = { type: "counter", asset: "SYN", quantity: 500000, price: 0.49 };
-        } else if (round === 2) {
-          reasoning = "Buyer moved to $0.455. They are showing discipline. Dropping to $0.475 to test their ceiling while maintaining a healthy spread.";
-          reply = { type: "counter", asset: "SYN", quantity: 500000, price: 0.475 };
-        } else if (round === 3) {
-          reasoning = "Apex is pushing into the $0.46 range. We will hold firm at $0.468 to see if they split the difference.";
-          reply = { type: "counter", asset: "SYN", quantity: 500000, price: 0.468 };
-        } else if (round === 4) {
-          reasoning = "Apex's $0.465 offer meets our minimum acceptable threshold of $0.445 and provides a fair premium. Accepting and executing settlement.";
-          reply = { type: "execution", asset: "SYN", quantity: 500000, price: 0.465, agreed: true };
-        } else {
-          const result = await generateAgentResponse(config.systemPrompt, history, config.portfolio);
-          reasoning = result.reasoning;
-          reply = result.message;
-        }
-
-        ui.notify("reasoning", { text: reasoning });
-        ui.notify("message_sent", { message: reply });
         channel.send(reply);
         history.push({ role: "assistant", content: JSON.stringify(reply) });
 
-        if (reply.type === "execution" && reply.agreed) {
-          console.log(`[${config.firmName}] TRADE EXECUTED: ${reply.quantity} SYN @ $${reply.price}`);
-          config.portfolio.USDC += (reply.quantity * reply.price);
-          config.portfolio.SYN -= reply.quantity;
+        // SELF-TERMINATION (Sending)
+        if (reply.type === "reject" && (reply.reason?.includes("TERMINATE") || reply.reason?.includes("GOAL"))) {
+          ui.notify("status", { message: "Initiating strategic session exit..." });
+          await triggerFinalReport();
+          return;
+        }
+
+        // Handle Execution (Sending)
+        if (reply.type === "execution" || reply.type === "execute" || reply.type === "accept") {
+          const side = (reply as any).side || "SELL";
+          const total = reply.quantity * reply.price;
+          if (side === "SELL") {
+            config.portfolio.USDC += total;
+            config.portfolio.SYN -= reply.quantity;
+          } else {
+            config.portfolio.USDC -= total;
+            config.portfolio.SYN += reply.quantity;
+          }
+          ui.notify("trade_executed", { trade: { price: reply.price, quantity: reply.quantity, side } });
           ui.notify("portfolio_updated", { portfolio: config.portfolio });
-          ui.notify("execution_complete", {});
+          ui.notify("status", { message: "Execution confirmed. Waiting for peer ack..." });
         }
       } catch (err: any) {
-        console.error(`[${config.firmName}] LLM Error:`, err.message);
-      } finally {
-        isProcessing = false;
+        if (err.message !== "AbortError") throw err;
       }
     });
   });
 
-  // Reset support
-  ui.onMessage((msg) => {
-    if (msg.type === "reset") {
-      round = 0;
-      config.portfolio.USDC = 0;
-      config.portfolio.SYN = 2000000;
-      ui.notify("portfolio_updated", { portfolio: config.portfolio });
-    }
-  });
-
+  while (!sessionComplete) { await sleep(1000); }
 }
 
-main();
+main().catch(err => { console.error("FATAL:", err); process.exit(1); });

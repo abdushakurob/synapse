@@ -196,4 +196,11 @@ export class FileSignalingAdapter implements SignalingAdapter {
       .map(r => this.parseRecord(r))
       .filter(r => r.responder.toBase58() === responderStr);
   }
+
+  async closeSession(sessionPDA: PublicKey): Promise<string> {
+    const data = this.read();
+    delete data[sessionPDA.toBase58()];
+    this.write(data);
+    return "local_file_sig_" + Math.random().toString(36).substring(7);
+  }
 }

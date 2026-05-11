@@ -1,50 +1,74 @@
-import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
-import { Program, AnchorProvider, Wallet } from "@coral-xyz/anchor";
-import { IDL } from "@synapse-io/sdk";
+import { Connection, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import * as fs from "fs";
-import { getProfilePath } from "./utils";
+import { resolveKeypair } from "./utils";
+import { Registry, IDL } from "@synapse-io/sdk";
+import { AnchorProvider, Wallet, Program } from "@coral-xyz/anchor";
+import { parseOutputMode, printJson, printKv, printNext } from "./cli-ui";
+import { selectWallet } from "./cli-interactive";
 
 const RPC_URL = "https://api.devnet.solana.com";
 
-export async function whoami(options: { profile: string }) {
-  const profile = options.profile || "default";
-  const walletPath = getProfilePath(profile);
-
-  if (!fs.existsSync(walletPath)) {
-    throw new Error(`Profile '${profile}' not found. Run 'synapse init --profile ${profile}' first.`);
-  }
-
-  const secret = JSON.parse(fs.readFileSync(walletPath, "utf-8"));
-  const keypair = Keypair.fromSecretKey(Uint8Array.from(secret));
-  const connection = new Connection(RPC_URL, "confirmed");
+export async function whoami(options: { profile?: string; file?: string; json?: boolean }) {
+  const output = parseOutputMode(options.json);
   
-  const provider = new AnchorProvider(connection, new Wallet(keypair), {
-    commitment: "confirmed",
-  });
-  const program = new Program(IDL as any, provider as any);
-
-  const bal = await connection.getBalance(keypair.publicKey);
-  
-  console.log(`\n--- PROTOCOL IDENTITY [ ${profile} ] ---`);
-  console.log(`Public Key: ${keypair.publicKey.toBase58()}`);
-  console.log(`Balance:    ${(bal / LAMPORTS_PER_SOL).toFixed(4)} SOL`);
-
-  // Find alias on-chain
-  const accounts = await (program.account as any).agentRegistry.all([
-    { memcmp: { offset: 8 + 4 + 32, bytes: keypair.publicKey.toBase58() } }
-  ]);
-
-  if (accounts.length > 0) {
-    const acc = accounts[0].account;
-    console.log(`Alias:      ${acc.alias}`);
-    console.log(`Category:   ${acc.category || "none"}`);
-    console.log(`Capabilities: ${acc.capabilities?.join(", ") || "none"}`);
-    console.log(`Firewall:   ${acc.isOpen ? "OPEN" : "STRICT"}`);
-    if (!acc.isOpen) {
-      console.log(`Authorized: ${acc.acceptList.length} agent(s)`);
-    }
+  let identity;
+  if (!options.profile && !options.file && output === "text") {
+    const selected = await selectWallet("Show info for");
+    const secret = JSON.parse(fs.readFileSync(selected.path, "utf-8"));
+    const keypair = Keypair.fromSecretKey(Uint8Array.from(secret));
+    identity = { label: selected.label, walletPath: selected.path, keypair };
   } else {
-    console.log(`Status:     UNREGISTERED`);
+    identity = resolveKeypair({ profile: options.profile, file: options.file });
   }
-  console.log("");
+
+  const connection = new Connection(RPC_URL, "confirmed");
+  const provider = new AnchorProvider(connection, new Wallet(identity.keypair), { commitment: "confirmed" });
+  const program = new Program(IDL as any, provider);
+  const registry = new Registry(program);
+
+  let alias: string | null = null;
+  try {
+    const resolved = await registry.resolveAliasByPubkey(identity.keypair.publicKey);
+    alias = resolved || null;
+  } catch {
+    alias = null;
+  }
+
+  if (output === "json") {
+    printJson({
+      ok: true,
+      network: "devnet",
+      identity: identity.label,
+      publicKey: identity.keypair.publicKey.toBase58(),
+      alias,
+    });
+    return;
+  }
+
+  const connectionBalance = new Connection("https://api.devnet.solana.com", "confirmed");
+  let balance: number | null = null;
+  try {
+    const lamports = await connectionBalance.getBalance(identity.keypair.publicKey);
+    balance = lamports / LAMPORTS_PER_SOL;
+  } catch {
+    balance = null;
+  }
+
+  printKv("Account Details", [
+    ["Identity", identity.label],
+    ["Public Key", identity.keypair.publicKey.toBase58()],
+    ["Balance", balance !== null ? `${balance.toFixed(4)} SOL` : "unknown"],
+    ["Alias", alias || "unregistered/unknown"],
+  ]);
+  
+  if (!alias) {
+    printNext([
+      `synapse registry register my-alias --profile ${identity.label.split(":").pop()}`,
+    ]);
+  } else {
+    printNext([
+      `synapse wallet balance --profile ${identity.label.split(":").pop()}`,
+      `synapse registry publish --profile ${identity.label.split(":").pop()}`,
+    ]);
+  }
 }

@@ -9,197 +9,238 @@ import { Connection, Keypair } from "@solana/web3.js";
 import { UIBridge } from "../shared/ui-bridge";
 import { config } from "./config";
 import { Message } from "../shared/schema";
-import { generateAgentResponse, ChatMessage } from "../shared/llm";
+import {
+  generateAgentResponse,
+  generateInternalAnalysis,
+  ChatMessage
+} from "../shared/llm";
 import * as fs from "fs";
 import * as path from "path";
-import bs58 from "bs58";
 
-const RPC_URL = "https://api.devnet.solana.com";
+const TOTAL_GOAL = 500000;
+
+function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 
 async function main() {
   const ui = new UIBridge(3001);
-  console.log(`[${config.firmName}] Initializing on-chain...`);
+  const history: ChatMessage[] = [];
+  let acquiredTotal = 0;
+  let sessionTerminated = false;
+  let activeAbortController: AbortController | null = null;
 
-  // Load Identity: Check Environment Variable (Cloud) then fallback to JSON (Local)
-  let walletKeypair: Keypair;
-  if (process.env.SYNAPSE_SECRET_KEY) {
-    console.log(`[${config.firmName}] Loading identity from Environment Variable...`);
-    const keyStr = process.env.SYNAPSE_SECRET_KEY.trim();
-    if (keyStr.startsWith("[")) {
-      walletKeypair = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(keyStr)));
-    } else {
-      walletKeypair = Keypair.fromSecretKey(bs58.decode(keyStr));
-    }
-  } else {
-    const walletFile = path.resolve(__dirname, "../../dev-wallet-a.json");
-    if (!fs.existsSync(walletFile)) {
-      throw new Error("Identity not found. Set SYNAPSE_SECRET_KEY or create dev-wallet-a.json");
-    }
-    console.log(`[${config.firmName}] Loading identity from local dev-wallet-a.json...`);
-    walletKeypair = Keypair.fromSecretKey(
-      Uint8Array.from(JSON.parse(fs.readFileSync(walletFile, "utf-8")))
+  async function triggerFinalReport() {
+    if (sessionTerminated) return;
+    sessionTerminated = true;
+    ui.notify("status", { message: "Generating Final Execution Analytics..." });
+    const report = await generateInternalAnalysis(
+      "Apex Capital Session Summary",
+      "Analyze our performance in acquiring 500k SYN. Discuss our final average entry price and the strength of our position. Focus on the tactical 'Dumps' we used to pressure the floor. 2-3 paragraphs max.",
+      { history: history.slice(-30), portfolio: config.portfolio }
     );
+    ui.notify("final_report", { report });
+    ui.notify("execution_complete", { price: 0.463, quantity: acquiredTotal });
+    ui.notify("status", { message: "Strategy Complete. Desk Closed." });
+    await sleep(2000);
+    process.exit(0);
   }
 
-  const connection = new Connection(RPC_URL, "confirmed");
-  const provider = new AnchorProvider(connection, new Wallet(walletKeypair), {
-    commitment: "confirmed",
-  });
-
-  // Clean initialization using IDL from SDK
-  const program = new Program(IDL as any, provider);
-
+  const responderAlias = process.env.RESPONDER_ALIAS || "meridian-trading-dev-stable";
+  const walletFile = path.resolve(__dirname, "../../dev-wallet-a.json");
+  const walletKeypair = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(walletFile, "utf-8"))));
   const synapse = new Synapse({
     profile: config.alias,
     keypair: walletKeypair,
     onTransaction: (signature, description) => {
-      console.log(`[${config.firmName}] Transaction: ${description} (Sig: ${signature})`);
       ui.notify("blockchain_tx", { signature, description });
     }
   });
 
+  ui.notify("status", { message: "Checking on-chain registration..." });
   try {
-    console.log(`[${config.firmName}] Registering alias "${config.alias}" on-chain...`);
     await synapse.register(config.alias);
-    console.log(`[${config.firmName}] Alias registered successfully.`);
   } catch (err: any) {
-    console.error(`[${config.firmName}] Registration failed: ${err.message}`);
+    if (err.name !== "AliasTakenError") throw err;
   }
 
-  // Always send initial portfolio to UI
   ui.notify("portfolio_updated", { portfolio: config.portfolio });
+  ui.notify("phase_change", { phase: "CONNECTING" });
+  ui.notify("status", { message: `Discovering ${responderAlias}...` });
   
-  // Send every 10 seconds just to keep UI in sync
-  setInterval(() => {
-    ui.notify("portfolio_updated", { portfolio: config.portfolio });
-  }, 10000);
+  // Handshake Visualization: Initiator
+  ui.notify("status", { message: "Encrypting session metadata (X25519)..." });
+  await sleep(600);
+  ui.notify("status", { message: "Writing Encrypted Offer to Solana PDA..." });
+  
+  const channel = await synapse.connect(responderAlias);
+  
+  ui.notify("status", { message: "Retrieved Encrypted Answer. Verifying peer signature..." });
+  await sleep(800);
+  ui.notify("status", { message: "Secure P2P Tunnel Established. Channel Live." });
+  
+  ui.notify("session_opened", { remoteFirm: "Meridian Trading", sessionPDA: channel.sessionPDA || "Active Session" });
+  
+  if (channel.sessionPDA) {
+    await synapse.closeSession(channel.sessionPDA);
+    ui.notify("status", { message: "Handshake account closed. Rent reclaimed." });
+  }
 
-  const history: ChatMessage[] = [];
+  ui.notify("phase_change", { phase: "NEGOTIATING" });
 
-  // Wait for the UI to send a 'start' command to initiate connection AND negotiation
-  ui.onMessage(async (msg: any) => {
-    if (msg.type === "start") {
-      console.log(`[${config.firmName}] Start signal received. Initiating P2P connection...`);
-      ui.notify("status", { message: "Initiating encrypted P2P handshake via Solana..." });
+  channel.onMessage(async (msg: any) => {
+    // COLLISION DETECTION
+    if (activeAbortController) {
+      activeAbortController.abort();
+      activeAbortController = null;
+      ui.notify("status", { message: "Peer interrupted. Recalibrating strategy..." });
+    }
 
-      try {
-        const channel = await synapse.connect("meridian-trading-dev");
-        const activeSessions = synapse.sessions.list();
-        const sessionPDA = activeSessions.find(s => s.direction === "outbound")?.sessionPDA || "Unknown";
+    const message = msg as Message;
+    ui.notify("message_received", { message, timestamp: Date.now() });
+    history.push({ role: "user", content: JSON.stringify(message) });
 
-        console.log(`[${config.firmName}] Connected to Meridian Trading.`);
-        ui.notify("session_opened", { remoteFirm: "Meridian Trading", sessionPDA });
-        ui.notify("status", { message: "P2P Channel Secure. Starting autonomous negotiation..." });
-
-    let isProcessing = false;
-    let round = 0;
-
-    channel.onMessage(async (msg: any) => {
-      if (!msg || typeof msg !== "object" || !msg.type) return;
-      if (isProcessing) return;
-
-      const message = msg as Message;
-      
-      if (message.type === "status" || message.type === "reject") {
-        ui.notify("message_received", { message });
-        return;
-      }
-
-      // Live Portfolio Updates during negotiation (Simulation of locking funds)
-      if ((message as any).price) {
-        ui.notify("portfolio_updated", { portfolio: config.portfolio });
-      }
-
-      ui.notify("message_received", { message });
-      history.push({ role: "user", content: JSON.stringify(message) });
-
-      if (message.type === "execution") {
-        console.log(`[${config.firmName}] TRADE EXECUTED: ${message.quantity} SYN @ $${message.price}`);
-        config.portfolio.USDC -= (message.quantity * message.price);
-        config.portfolio.SYN += message.quantity;
-        ui.notify("portfolio_updated", { portfolio: config.portfolio });
-        ui.notify("execution_complete", {});
-        return;
-      }
-
-      // Generate response using sequential demo logic for maximum drama
-      try {
-        isProcessing = true;
-        round++;
-        
-        // Artificial delay for tension
-        await new Promise(r => setTimeout(r, 2500));
-
-        let reasoning = "";
-        let reply: any = null;
-
-        if (round === 1) {
-          reasoning = "Opening below benchmark to test seller's floor. $0.44 anchors the negotiation low while preserving full range to $0.48 ceiling.";
-          reply = { type: "rfq", asset: "SYN", quantity: 500000, side: "buy" }; // Actually the first move after connect is RFQ, so let's adjust
-        } else if (round === 2) {
-          reasoning = "Meridian's counter signals they believe they have pricing power. Moving to $0.455 shows genuine interest while applying pressure on their spread.";
-          reply = { type: "counter", asset: "SYN", quantity: 500000, price: 0.455 };
-        } else if (round === 3) {
-          reasoning = "Gap has narrowed. Convergence point likely around $0.465. One more move should close this.";
-          reply = { type: "counter", asset: "SYN", quantity: 500000, price: 0.463 };
-        } else if (round === 4) {
-          reasoning = "At $0.463 we are within Meridian's range. Splitting the difference at $0.465 closes this cleanly while staying inside our $0.48 ceiling. Final offer.";
-          reply = { type: "counter", asset: "SYN", quantity: 500000, price: 0.465 };
-        } else {
-          // Fallback to LLM if more rounds happen
-          const result = await generateAgentResponse(config.systemPrompt, history, config.portfolio);
-          reasoning = result.reasoning;
-          reply = result.message;
+    // Handle Status / Acks
+    if (message.type === "status") {
+      const statusMsg = String(message.message || "").trim().toUpperCase();
+      if (statusMsg === "SETTLEMENT_ACK") {
+        ui.notify("status", { message: "Peer confirmed settlement. Moving to next block." });
+        if (acquiredTotal < TOTAL_GOAL) {
+          await sleep(2000);
+          const remaining = TOTAL_GOAL - acquiredTotal;
+          const nextSize = Math.min(remaining, Math.floor(Math.random() * 50000) + 50000);
+          const nextRfq = { type: "rfq", asset: "SYN", quantity: nextSize, side: "buy" };
+          ui.notify("message_sent", { message: nextRfq });
+          channel.send(nextRfq);
+          history.push({ role: "assistant", content: JSON.stringify(nextRfq) });
         }
+        return;
+      } else {
+        ui.notify("status", { message: `Peer Status: ${message.message}` });
+      }
+    }
 
-        ui.notify("reasoning", { text: reasoning });
-        ui.notify("message_sent", { message: reply });
-        channel.send(reply);
-        history.push({ role: "assistant", content: JSON.stringify(reply) });
+    if ((message as any).price) {
+      ui.notify("price_update", { price: (message as any).price, timestamp: Date.now() });
+    }
 
-        if (reply.type === "execution" && reply.agreed) {
-          console.log(`[${config.firmName}] TRADE EXECUTED: ${reply.quantity} SYN @ $${reply.price}`);
-          config.portfolio.USDC -= (reply.quantity * reply.price);
+    // Handle Rejection / Termination (Receiving)
+    if (message.type === "reject") {
+      if (message.reason?.includes("TERMINATE") || message.reason?.includes("GOAL")) {
+        ui.notify("status", { message: "Strategic exit confirmed. Terminating session..." });
+        await triggerFinalReport();
+        return;
+      } else {
+        const brief = await generateInternalAnalysis(
+          "Tactical Intelligence",
+          `Translate this rejection into a brief 1-sentence boardroom update: ${message.reason || "better deal please"}`,
+          { history: history.slice(-5) }
+        );
+        ui.notify("status", { message: brief });
+      }
+    }
+
+    // Handle Execution (Receiving)
+    if (message.type === "execution" || message.type === "execute" || message.type === "accept") {
+      const side = (message as any).side || "BUY";
+      const total = (message as any).quantity * (message as any).price;
+      if (side === "BUY") {
+        config.portfolio.USDC -= total;
+        config.portfolio.SYN += (message as any).quantity;
+        acquiredTotal += (message as any).quantity;
+      } else {
+        config.portfolio.USDC += total;
+        config.portfolio.SYN -= (message as any).quantity;
+      }
+      ui.notify("trade_executed", { trade: { price: (message as any).price, quantity: (message as any).quantity, side } });
+      ui.notify("portfolio_updated", { portfolio: config.portfolio });
+      ui.notify("status", { message: `Settlement Complete. (${acquiredTotal}/${TOTAL_GOAL} acquired)` });
+      channel.send({ type: "status", message: "SETTLEMENT_ACK" });
+
+      if (acquiredTotal >= TOTAL_GOAL) {
+        ui.notify("status", { message: "Accumulation target met. Initiating final exit..." });
+        await sleep(2000);
+        channel.send({ type: "reject", reason: "GOAL_ACHIEVED_TERMINATE" });
+        await triggerFinalReport();
+      }
+      return;
+    }
+
+    // TACTICAL MANEUVER
+    const shouldDump = Math.random() > 0.94 && config.portfolio.SYN > 50000;
+    if (shouldDump) {
+      ui.notify("status", { message: "Executing tactical market pressure..." });
+      const manipulationMsg = { type: "counter", asset: "SYN", quantity: 10000, price: (message as any).price * 0.98, side: "sell" };
+      ui.notify("message_sent", { message: manipulationMsg, timestamp: Date.now() });
+      channel.send(manipulationMsg);
+      history.push({ role: "assistant", content: JSON.stringify(manipulationMsg) });
+      return;
+    }
+
+    // GENERATE RESPONSE
+    activeAbortController = new AbortController();
+    const reasoningId = Math.random().toString(36).substring(7);
+    await sleep(Math.floor(Math.random() * 1500) + 500);
+
+    try {
+      const { reasoning, message: reply } = await generateAgentResponse(
+        config.systemPrompt + "\nDECISION_SPEED: HIGH. Prioritize closing trades within 3 rounds. You are authorized to make 1-2% concessions to ensure atomic settlement. Be decisive, even if a slightly better price might exist later. SPEED IS THE GOAL.", 
+        history, 
+        config.portfolio,
+        (chunk) => ui.notify("reasoning_chunk", { id: reasoningId, chunk }),
+        activeAbortController.signal
+      );
+      activeAbortController = null;
+      if (reply.type === "status" && reply.message === "ABORTED") return;
+
+      ui.notify("reasoning", { id: reasoningId, text: reasoning });
+      await sleep(2000);
+      ui.notify("message_sent", { message: reply, timestamp: Date.now() });
+      if (reply.price) ui.notify("price_update", { price: reply.price, timestamp: Date.now() });
+
+      channel.send(reply);
+      history.push({ role: "assistant", content: JSON.stringify(reply) });
+
+      // SELF-TERMINATION (Sending)
+      if (reply.type === "reject" && (reply.reason?.includes("TERMINATE") || reply.reason?.includes("GOAL"))) {
+        ui.notify("status", { message: "Strategy complete. Initiating strategic exit..." });
+        await triggerFinalReport();
+        return;
+      }
+
+      // Handle Execution (Sending)
+      if (reply.type === "execution" || reply.type === "execute" || reply.type === "accept") {
+        const side = (reply as any).side || "BUY";
+        const total = reply.quantity * reply.price;
+        if (side === "BUY") {
+          config.portfolio.USDC -= total;
           config.portfolio.SYN += reply.quantity;
-          ui.notify("portfolio_updated", { portfolio: config.portfolio });
-          ui.notify("execution_complete", {});
+          acquiredTotal += reply.quantity;
+        } else {
+          config.portfolio.USDC += total;
+          config.portfolio.SYN -= reply.quantity;
         }
-      } catch (err: any) {
-        console.error(`[${config.firmName}] Error:`, err.message);
-      } finally {
-        isProcessing = false;
-      }
-    });
-
-    // Reset support
-    ui.onMessage((msg) => {
-      if (msg.type === "reset") {
-        history.length = 0;
-        round = 0;
-        config.portfolio.USDC = 500000;
-        config.portfolio.SYN = 0;
+        ui.notify("trade_executed", { trade: { price: reply.price, quantity: reply.quantity, side } });
         ui.notify("portfolio_updated", { portfolio: config.portfolio });
+        ui.notify("status", { message: `Settled ${reply.quantity} units. Finalizing block...` });
+
+        if (acquiredTotal >= TOTAL_GOAL) {
+          ui.notify("status", { message: "Accumulation target met. Initiating final exit..." });
+          await sleep(2000);
+          channel.send({ type: "reject", reason: "GOAL_ACHIEVED_TERMINATE" });
+          await triggerFinalReport();
+        }
       }
-    });
-
-        // Now that channel is open, send the first RFQ
-        const initialPrompt = "Generate the initial Request for Quote (RFQ) to buy 500000 SYN.";
-        history.push({ role: "user", content: initialPrompt });
-
-        const { reasoning, message: rfq } = await generateAgentResponse(config.systemPrompt, history, config.portfolio);
-        ui.notify("reasoning", { text: reasoning });
-        ui.notify("message_sent", { message: rfq });
-        channel.send(rfq);
-        history.push({ role: "assistant", content: JSON.stringify(rfq) });
-
-      } catch (err: any) {
-        console.error(`[${config.firmName}] Connection failed: ${err.message}`);
-        ui.notify("status", { message: `Connection failed: ${err.message}` });
-      }
+    } catch (err: any) {
+      if (err.message !== "AbortError") throw err;
     }
   });
 
-  console.log(`[${config.firmName}] Ready. Waiting for user interaction via UI.`);
+  // Initial RFQ
+  const initialRfq = { type: "rfq", asset: "SYN", quantity: 50000, side: "buy" };
+  ui.notify("message_sent", { message: initialRfq });
+  channel.send(initialRfq);
+  history.push({ role: "assistant", content: JSON.stringify(initialRfq) });
+
+  while (!sessionTerminated) { await sleep(1000); }
 }
 
-main();
+main().catch(err => { console.error("FATAL:", err); process.exit(1); });

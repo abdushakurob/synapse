@@ -1,4 +1,10 @@
-{
+/**
+ * Program IDL in camelCase format in order to be used in JS/TS.
+ *
+ * Note that this is only a type helper and is not the actual IDL. The original
+ * IDL can be found at `target/idl/synapse.json`.
+ */
+export type Synapse = {
   "address": "eCv677gAYX6ptLtJrPv9Rj8C4eGA4c9ecswRT5QJbeG",
   "metadata": {
     "name": "synapse",
@@ -8,7 +14,7 @@
   },
   "instructions": [
     {
-      "name": "close_session",
+      "name": "closeSession",
       "discriminator": [
         68,
         114,
@@ -35,7 +41,7 @@
       "args": []
     },
     {
-      "name": "configure_agent",
+      "name": "configureAgent",
       "discriminator": [
         185,
         111,
@@ -48,26 +54,26 @@
       ],
       "accounts": [
         {
-          "name": "agent_registry",
+          "name": "agentRegistry",
           "writable": true
         },
         {
           "name": "owner",
           "signer": true,
           "relations": [
-            "agent_registry"
+            "agentRegistry"
           ]
         }
       ],
       "args": [
         {
-          "name": "accept_list",
+          "name": "acceptList",
           "type": {
             "vec": "pubkey"
           }
         },
         {
-          "name": "is_open",
+          "name": "isOpen",
           "type": "bool"
         },
         {
@@ -87,7 +93,7 @@
       ]
     },
     {
-      "name": "create_session",
+      "name": "createSession",
       "discriminator": [
         242,
         193,
@@ -140,7 +146,7 @@
           "name": "responder"
         },
         {
-          "name": "responder_registry",
+          "name": "responderRegistry",
           "pda": {
             "seeds": [
               {
@@ -155,13 +161,13 @@
               },
               {
                 "kind": "arg",
-                "path": "responder_alias"
+                "path": "responderAlias"
               }
             ]
           }
         },
         {
-          "name": "system_program",
+          "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
       ],
@@ -171,17 +177,17 @@
           "type": "u64"
         },
         {
-          "name": "encrypted_offer",
+          "name": "encryptedOffer",
           "type": "bytes"
         },
         {
-          "name": "_responder_alias",
+          "name": "responderAlias",
           "type": "string"
         }
       ]
     },
     {
-      "name": "expire_session",
+      "name": "expireSession",
       "discriminator": [
         102,
         173,
@@ -205,7 +211,7 @@
       "args": []
     },
     {
-      "name": "register_agent",
+      "name": "registerAgent",
       "discriminator": [
         135,
         157,
@@ -218,7 +224,7 @@
       ],
       "accounts": [
         {
-          "name": "agent_registry",
+          "name": "agentRegistry",
           "writable": true,
           "pda": {
             "seeds": [
@@ -245,7 +251,7 @@
           "signer": true
         },
         {
-          "name": "system_program",
+          "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
       ],
@@ -267,7 +273,7 @@
       ]
     },
     {
-      "name": "respond_session",
+      "name": "respondSession",
       "discriminator": [
         106,
         201,
@@ -293,7 +299,7 @@
       ],
       "args": [
         {
-          "name": "encrypted_answer",
+          "name": "encryptedAnswer",
           "type": "bytes"
         }
       ]
@@ -301,7 +307,7 @@
   ],
   "accounts": [
     {
-      "name": "AgentRegistry",
+      "name": "agentRegistry",
       "discriminator": [
         6,
         34,
@@ -314,7 +320,7 @@
       ]
     },
     {
-      "name": "Session",
+      "name": "session",
       "discriminator": [
         243,
         81,
@@ -330,38 +336,38 @@
   "errors": [
     {
       "code": 6000,
-      "name": "AliasTooLong",
+      "name": "aliasTooLong",
       "msg": "Alias is too long. Maximum 32 characters."
     },
     {
       "code": 6001,
-      "name": "CategoryTooLong",
+      "name": "categoryTooLong",
       "msg": "Category is too long. Maximum 32 characters."
     },
     {
       "code": 6002,
-      "name": "InvalidSessionStatus",
+      "name": "invalidSessionStatus",
       "msg": "Session is not in pending status."
     },
     {
       "code": 6003,
-      "name": "SessionExpired",
+      "name": "sessionExpired",
       "msg": "Session has expired."
     },
     {
       "code": 6004,
-      "name": "SessionNotExpired",
+      "name": "sessionNotExpired",
       "msg": "Session has not expired yet."
     },
     {
       "code": 6005,
-      "name": "UnauthorizedInitiator",
+      "name": "unauthorizedInitiator",
       "msg": "Initiator is not authorized to connect to this agent."
     }
   ],
   "types": [
     {
-      "name": "AgentRegistry",
+      "name": "agentRegistry",
       "type": {
         "kind": "struct",
         "fields": [
@@ -384,17 +390,17 @@
             }
           },
           {
-            "name": "accept_list",
+            "name": "acceptList",
             "type": {
               "vec": "pubkey"
             }
           },
           {
-            "name": "is_open",
+            "name": "isOpen",
             "type": "bool"
           },
           {
-            "name": "registered_at",
+            "name": "registeredAt",
             "type": "i64"
           },
           {
@@ -405,7 +411,7 @@
       }
     },
     {
-      "name": "Session",
+      "name": "session",
       "type": {
         "kind": "struct",
         "fields": [
@@ -418,11 +424,11 @@
             "type": "pubkey"
           },
           {
-            "name": "encrypted_offer",
+            "name": "encryptedOffer",
             "type": "bytes"
           },
           {
-            "name": "encrypted_answer",
+            "name": "encryptedAnswer",
             "type": {
               "option": "bytes"
             }
@@ -431,16 +437,16 @@
             "name": "status",
             "type": {
               "defined": {
-                "name": "SessionStatus"
+                "name": "sessionStatus"
               }
             }
           },
           {
-            "name": "created_at",
+            "name": "createdAt",
             "type": "i64"
           },
           {
-            "name": "expires_at",
+            "name": "expiresAt",
             "type": "i64"
           },
           {
@@ -451,21 +457,21 @@
       }
     },
     {
-      "name": "SessionStatus",
+      "name": "sessionStatus",
       "type": {
         "kind": "enum",
         "variants": [
           {
-            "name": "Pending"
+            "name": "pending"
           },
           {
-            "name": "Active"
+            "name": "active"
           },
           {
-            "name": "Closed"
+            "name": "closed"
           }
         ]
       }
     }
   ]
-}
+};

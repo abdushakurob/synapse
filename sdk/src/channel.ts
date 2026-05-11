@@ -3,6 +3,7 @@ import type Peer from "simple-peer";
 export type JsonMessage = Record<string, unknown>;
 type MessageHandler = (message: JsonMessage) => void;
 type CloseHandler = () => void;
+type OpenHandler = () => void;
 
 /**
  * Channel is a thin message abstraction around a WebRTC data channel.
@@ -12,13 +13,18 @@ export class Channel {
   private readonly peer: Peer.Instance;
   private readonly messageHandlers: Set<MessageHandler> = new Set();
   private readonly closeHandlers: Set<CloseHandler> = new Set();
+  private readonly openHandlers: Set<OpenHandler> = new Set();
   private isOpen = false;
+  public sessionPDA?: string;
 
   constructor(peer: Peer.Instance) {
     this.peer = peer;
 
     this.peer.on("connect", () => {
       this.isOpen = true;
+      for (const handler of this.openHandlers) {
+        handler();
+      }
     });
 
     this.peer.on("data", (rawData: Buffer) => {
@@ -60,6 +66,17 @@ export class Channel {
     this.closeHandlers.add(handler);
     return () => {
       this.closeHandlers.delete(handler);
+    };
+  }
+
+  onOpen(handler: OpenHandler): () => void {
+    // If already connected, fire on next tick to keep ordering predictable.
+    if (this.isOpen) {
+      queueMicrotask(() => handler());
+    }
+    this.openHandlers.add(handler);
+    return () => {
+      this.openHandlers.delete(handler);
     };
   }
 

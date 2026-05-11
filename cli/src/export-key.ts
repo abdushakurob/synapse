@@ -1,63 +1,43 @@
 import * as fs from "fs";
-import * as path from "path";
 import bs58 from "bs58";
-import { getProfilePath, listProfiles } from "./utils";
+import { Keypair } from "@solana/web3.js";
+import { resolveKeypair } from "./utils";
+import { printKv, printNext } from "./cli-ui";
+import { selectWallet } from "./cli-interactive";
 
-/**
- * Exports the profile keypair as a Base58 string.
- * Guides the user if multiple profiles exist or the requested one is missing.
- */
-export async function exportKey(options: { profile: string, file?: string }) {
-  let walletPath: string;
-  let label: string;
-
-  if (options.file) {
-    walletPath = options.file;
-    label = `FILE [ ${options.file} ]`;
+export async function exportKey(options: { profile?: string, file?: string, format?: string }) {
+  let identity;
+  
+  if (!options.profile && !options.file && process.stdin.isTTY) {
+    const selected = await selectWallet("Select wallet to export");
+    const secret = JSON.parse(fs.readFileSync(selected.path, "utf-8"));
+    const keypair = Keypair.fromSecretKey(Uint8Array.from(secret));
+    identity = { label: selected.label, walletPath: selected.path, keypair };
   } else {
-    const profile = options.profile || "default";
-    walletPath = getProfilePath(profile);
-    label = `PROFILE [ ${profile} ]`;
-
-    if (!fs.existsSync(walletPath)) {
-      const availableProfiles = listProfiles();
-      const localWallets = fs.readdirSync(process.cwd())
-        .filter(f => f.startsWith("dev-wallet") && f.endsWith(".json"));
-
-      console.log(`\n[CLI] ERROR: Profile '${profile}' not found.`);
-      
-      if (availableProfiles.length > 0 || localWallets.length > 0) {
-        console.log(`\nAvailable Projects/Profiles:`);
-        if (availableProfiles.length > 0) {
-          console.log(`  Managed Profiles (use --profile <name>):`);
-          availableProfiles.forEach(p => console.log(`    - ${p}`));
-        }
-        if (localWallets.length > 0) {
-          console.log(`  Local Wallets (use --file <path>):`);
-          localWallets.forEach(w => console.log(`    - ${w}`));
-        }
-        console.log("");
-        return;
-      } else {
-        throw new Error(`No profiles found. Run 'synapse init' to create one.`);
-      }
-    }
+    identity = resolveKeypair({ profile: options.profile, file: options.file });
   }
 
-  if (!fs.existsSync(walletPath)) {
-    throw new Error(`File not found: ${walletPath}`);
+  const secretBytes = identity.keypair.secretKey;
+  const format = (options.format || "json").toLowerCase();
+  
+  let value = "";
+  if (format === "base58") {
+    value = bs58.encode(secretBytes);
+  } else if (format === "json") {
+    value = JSON.stringify(Array.from(secretBytes));
+  } else {
+    throw new Error(`Unsupported --format '${options.format}'. Use 'json' or 'base58'.`);
   }
 
-  try {
-    const secret = JSON.parse(fs.readFileSync(walletPath, "utf-8"));
-    const base58Key = bs58.encode(Uint8Array.from(secret));
-    
-    console.log(`\n[CLI] EXPORTING ${label}`);
-    console.log(`---------------------------------------------------------`);
-    console.log(`Base58 Secret: ${base58Key}`);
-    console.log(`---------------------------------------------------------`);
-    console.log(`\nSet this as SYNAPSE_SECRET_KEY in your production environment.\n`);
-  } catch (err: any) {
-    console.error(`[CLI] Failed to export: ${err.message}`);
-  }
+  printKv("Account Secret Exported", [
+    ["Identity", identity.label],
+    ["Public Key", identity.keypair.publicKey.toBase58()],
+    ["Format", format],
+    ["Value", value],
+  ]);
+  
+  console.log("\nWARNING: Keep this secret key safe! Anyone with it can control your funds and identity.");
+  printNext([
+    `export SYNAPSE_SECRET_KEY='${value}'`,
+  ]);
 }

@@ -1,25 +1,38 @@
 import { Keypair, Connection, PublicKey } from "@solana/web3.js";
 import * as fs from "fs";
-import { getProfilePath } from "./utils";
+import { resolveKeypair } from "./utils";
 import { Program, AnchorProvider, Wallet } from "@coral-xyz/anchor";
-import IDL from "../../sdk/src/idl.json";
+import { IDL } from "@synapse-io/sdk";
+import { devnetTxUrl, printKv, printList } from "./cli-ui";
+import { selectWallet, promptInput } from "./cli-interactive";
 
 const RPC_URL = "https://api.devnet.solana.com";
 
-export async function setAccept(aliases: string[], options: { profile: string, open: boolean }) {
-  const walletPath = getProfilePath(options.profile);
-  if (!fs.existsSync(walletPath)) {
-    throw new Error(`Profile '${options.profile}' not found.`);
+export async function setAccept(aliases: string[], options: { profile?: string, file?: string, open: boolean }) {
+  let identity;
+  if (!options.profile && !options.file && process.stdin.isTTY) {
+    const selected = await selectWallet("Select identity to update allowlist");
+    const secret = JSON.parse(fs.readFileSync(selected.path, "utf-8"));
+    const keypair = Keypair.fromSecretKey(Uint8Array.from(secret));
+    identity = { label: selected.label, walletPath: selected.path, keypair };
+  } else {
+    identity = resolveKeypair({ profile: options.profile, file: options.file });
   }
 
-  const secret = JSON.parse(fs.readFileSync(walletPath, "utf-8"));
-  const keypair = Keypair.fromSecretKey(Uint8Array.from(secret));
   const connection = new Connection(RPC_URL, "confirmed");
-  const provider = new AnchorProvider(connection, new Wallet(keypair), { commitment: "confirmed" });
+  const provider = new AnchorProvider(connection, new Wallet(identity.keypair), { commitment: "confirmed" });
   const program = new Program(IDL as any, provider);
 
+  const finalAliases = [...aliases];
+  if (finalAliases.length === 0 && !options.open && process.stdin.isTTY) {
+    const input = await promptInput("Enter allowed aliases/pubkeys (comma separated)");
+    if (input) {
+      input.split(",").forEach(s => finalAliases.push(s.trim()));
+    }
+  }
+
   const pubkeys: PublicKey[] = [];
-  for (const item of aliases) {
+  for (const item of finalAliases) {
     try {
       if (item.length > 32 && !item.includes("-")) {
         pubkeys.push(new PublicKey(item));
@@ -32,16 +45,12 @@ export async function setAccept(aliases: string[], options: { profile: string, o
         pubkeys.push(account.owner);
       }
     } catch (err) {
-      console.warn(`[CLI] Warning: Could not resolve alias '${item}' to an on-chain identity.`);
+      console.warn(`[Synapse] Could not resolve '${item}' to an on-chain identity.`);
     }
   }
 
-  console.log(`[CLI] Updating Agentic Firewall for ${options.profile}...`);
-  console.log(`[CLI] Open mode: ${options.open}`);
-  console.log(`[CLI] Authorized: ${pubkeys.length} agent(s)`);
-
   const [registryPDA] = PublicKey.findProgramAddressSync(
-    [Buffer.from("agent"), Buffer.from(await getAlias(program, keypair.publicKey))],
+    [Buffer.from("agent"), Buffer.from(await getAlias(program, identity.keypair.publicKey))],
     program.programId
   );
 
@@ -54,11 +63,21 @@ export async function setAccept(aliases: string[], options: { profile: string, o
     )
     .accounts({
       agentRegistry: registryPDA,
-      owner: keypair.publicKey,
+      owner: identity.keypair.publicKey,
     })
     .rpc();
 
-  console.log(`[CLI] Firewall updated successfully! Tx: ${signature}`);
+  printKv("Registry allowlist updated", [
+    ["Identity", identity.label],
+    ["Open Mode", options.open ? "ON (Accept all)" : "OFF (Restricted)"],
+    ["Authorized Keys", `${pubkeys.length}`],
+    ["Signature", signature],
+    ["Explorer", devnetTxUrl(signature)],
+  ]);
+  
+  if (finalAliases.length > 0) {
+    printList("Authorized Entities", finalAliases);
+  }
 }
 
 async function getAlias(program: Program<any>, owner: PublicKey): Promise<string> {

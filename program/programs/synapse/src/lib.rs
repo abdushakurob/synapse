@@ -200,8 +200,8 @@ pub struct ExpireSession<'info> {
 
 #[account]
 pub struct AgentRegistry {
-    pub alias: String,          // 4 + 32
     pub owner: Pubkey,          // 32
+    pub alias: String,          // 4 + 32
     pub category: String,       // 4 + 32
     pub capabilities: Vec<String>, // 4 + (10 * 32)
     pub accept_list: Vec<Pubkey>, // 4 + (100 * 32)

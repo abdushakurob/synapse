@@ -4,290 +4,209 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Meridian Trading | Market Making Agent</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary: #FF4D00;
-            --bg: #0A0B10;
-            --surface: #161821;
-            --text: #FFFFFF;
-            --text-dim: #8A8D98;
-            --border: rgba(255, 255, 255, 0.1);
-            --success: #00C853;
-            --accent: #FF4D00;
+            --primary: #F59E0B;
+            --primary-dim: rgba(245,158,11,0.15);
+            --bg: #050709;
+            --surface: #0C0F14;
+            --surface-2: #12161D;
+            --surface-3: #1A1F2B;
+            --text: #E8ECF4;
+            --text-dim: #6B7280;
+            --text-muted: #3B4150;
+            --border: rgba(255,255,255,0.06);
+            --green: #22C55E;
+            --green-dim: rgba(34,197,94,0.12);
+            --red: #EF4444;
+            --red-dim: rgba(239,68,68,0.12);
+            --amber: #F59E0B;
+            --amber-dim: rgba(245,158,11,0.12);
+            --purple: #A78BFA;
+            --purple-dim: rgba(167,139,250,0.08);
+            --cyan: #FB923C;
         }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            background: var(--bg);
-            color: var(--text);
-            font-family: 'Inter', sans-serif;
-            overflow: hidden;
-            height: 100vh;
-        }
+        * { margin:0;padding:0;box-sizing:border-box; }
+        body { background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;overflow:hidden;height:100vh; }
 
         .dashboard {
-            display: grid;
-            grid-template-columns: 350px 1fr;
-            grid-template-rows: 80px 1fr;
-            height: 100vh;
+            display:grid;
+            grid-template-columns:300px 1fr 320px;
+            grid-template-rows:56px 1fr;
+            height:100vh;
         }
 
+        /* HEADER */
         header {
-            grid-column: 1 / -1;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0 32px;
-            border-bottom: 1px solid var(--border);
-            background: rgba(22, 24, 33, 0.8);
-            backdrop-filter: blur(10px);
-            z-index: 100;
+            grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;
+            padding:0 20px;border-bottom:1px solid var(--border);
+            background:rgba(12,15,20,0.95);backdrop-filter:blur(16px);z-index:100;
         }
-
-        .logo-section {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-        }
-
+        .logo-section { display:flex;align-items:center;gap:12px; }
         .logo-icon {
-            width: 40px;
-            height: 40px;
-            background: var(--primary);
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            font-size: 20px;
+            width:32px;height:32px;background:linear-gradient(135deg,#F59E0B,#D97706);
+            border-radius:6px;display:flex;align-items:center;justify-content:center;
+            font-weight:800;font-size:12px;letter-spacing:1px;
+            box-shadow:0 0 24px rgba(245,158,11,0.4);
+        }
+        .logo-text h1 { font-size:14px;font-weight:700;letter-spacing:2px; }
+        .logo-text p { font-size:10px;color:var(--text-dim); }
+        .header-right { display:flex;align-items:center;gap:14px; }
+        #status-text { font-size:11px;color:var(--text-dim);max-width:260px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+        .phase-badge {
+            display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:16px;
+            font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;
+            border:1px solid var(--border);background:rgba(255,255,255,0.02);
+            transition:all 0.4s ease;
+        }
+        .phase-badge[data-phase="BOOTING"] { color:var(--amber);border-color:rgba(245,158,11,0.3); }
+        .phase-badge[data-phase="ANALYZING"] { color:var(--cyan);border-color:rgba(251,146,60,0.3); }
+        .phase-badge[data-phase="LISTENING"] { color:var(--purple);border-color:rgba(167,139,250,0.3); }
+        .phase-badge[data-phase="CONNECTING"] { color:var(--purple);border-color:rgba(167,139,250,0.3); }
+        .phase-badge[data-phase="NEGOTIATING"] { color:var(--primary);border-color:rgba(245,158,11,0.3); }
+        .phase-badge[data-phase="SETTLED"] { color:var(--green);border-color:rgba(34,197,94,0.3); }
+        .phase-dot { width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor;animation:pulse 2s infinite; }
+        @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.3} }
+
+        /* SIDEBAR */
+        .sidebar { background:var(--surface);border-right:1px solid var(--border);padding:16px;display:flex;flex-direction:column;gap:16px;overflow-y:auto; }
+        .section-label { font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:8px;font-weight:700; }
+
+        /* PORTFOLIO */
+        .portfolio-card { background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:14px; }
+        .asset-row { display:flex;justify-content:space-between;align-items:center;padding:6px 0; }
+        .asset-label { font-size:12px;color:var(--text-dim);font-weight:500; }
+        .asset-value { font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px;transition:all 0.3s; }
+        .asset-value.flash-green { color:var(--green);text-shadow:0 0 12px rgba(34,197,94,0.6); }
+        .asset-value.flash-red { color:var(--red);text-shadow:0 0 12px rgba(239,68,68,0.6); }
+        .reserve-row { border-top:1px solid var(--border);margin-top:6px;padding-top:8px; }
+        .reserve-label { font-size:10px;color:var(--amber);font-weight:600; }
+        .reserve-value { font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--amber); }
+
+        /* CHART */
+        .chart-card { background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:10px;height:120px;display:flex;flex-direction:column; }
+        #price-chart { flex:1;width:100%; }
+
+        /* TRADES LIST */
+        .trades-card { background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:10px;max-height:150px;overflow-y:auto; }
+        .trade-row { display:flex;justify-content:space-between;font-size:10px;padding:4px 0;border-bottom:1px solid var(--border); }
+        .trade-row:last-child { border-bottom:none; }
+        .trade-price { font-weight:700;color:var(--green); }
+        .trade-qty { color:var(--text-dim); }
+
+        /* DEAL TRACKER */
+        .deal-tracker { background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:14px; }
+        .deal-header { display:flex;justify-content:space-between;margin-bottom:10px; }
+        .deal-price { text-align:center; }
+        .deal-price-label { font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px; }
+        .deal-price-value { font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700; }
+        .deal-price-value.bid { color:var(--green); }
+        .deal-price-value.ask { color:var(--amber); }
+        .spread-bar-container { height:6px;background:var(--surface-3);border-radius:3px;overflow:hidden;margin:10px 0; }
+        .spread-bar { height:100%;border-radius:3px;transition:width 0.8s ease,background 0.5s; }
+        .deal-status { font-size:10px;color:var(--text-dim);text-align:center;font-family:'JetBrains Mono',monospace; }
+        .deal-qty { font-size:11px;color:var(--text-dim);text-align:center;margin-top:4px; }
+        .deal-value { font-size:12px;color:var(--text);text-align:center;font-weight:600;margin-top:6px;font-family:'JetBrains Mono',monospace; }
+
+        /* SESSION */
+        .session-card { background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:12px; }
+        .info-row { display:flex;flex-direction:column;gap:2px;margin-bottom:8px; }
+        .info-row:last-child { margin-bottom:0; }
+        .info-label { color:var(--text-muted);font-size:9px;text-transform:uppercase;letter-spacing:1px; }
+        .info-value { color:var(--text);font-size:11px;font-family:'JetBrains Mono',monospace;word-break:break-all; }
+
+        /* CRYPTO */
+        .crypto-section { background:var(--purple-dim);border:1px solid rgba(167,139,250,0.15);border-radius:8px;padding:10px;max-height:100px;overflow-y:auto; }
+        .crypto-entry { font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--purple);padding:2px 0;animation:fadeIn 0.4s; }
+        .crypto-entry::before { content:'🔐 ';font-size:9px; }
+
+        /* MAIN */
+        .main-area { display:flex;flex-direction:column;gap:12px;padding:16px;overflow:hidden;position:relative; }
+
+        /* BLOCKCHAIN */
+        .blockchain-strip { background:rgba(0,0,0,0.5);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:10px;font-family:'JetBrains Mono',monospace;max-height:56px;overflow-y:auto;flex-shrink:0; }
+        .tx-entry { padding:1px 0;animation:fadeIn 0.3s; }
+        .tx-entry a { color:var(--text-dim);text-decoration:none; }
+        .tx-entry a:hover { text-decoration:underline; }
+
+        /* EXECUTION TOAST */
+        .execution-toast {
+            position:absolute;top:20px;right:20px;z-index:200;
+            background:rgba(12,15,20,0.95);border:1px solid var(--green);
+            padding:12px 20px;border-radius:8px;box-shadow:0 10px 40px rgba(0,0,0,0.5);
+            display:none;animation:toastIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            backdrop-filter:blur(10px);
+        }
+        @keyframes toastIn { from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1} }
+        .execution-toast h3 { font-size:14px;color:var(--green);margin-bottom:4px; }
+        .execution-toast p { font-size:11px;color:var(--text);margin-bottom:8px; }
+        .review-btn {
+            background:var(--green);color:white;border:none;padding:4px 10px;
+            border-radius:4px;font-size:10px;font-weight:700;cursor:pointer;
         }
 
-        .logo-text h1 {
-            font-size: 18px;
-            font-weight: 600;
-            letter-spacing: 1px;
+        /* MODAL */
+        .modal-overlay {
+            position:fixed;top:0;left:0;width:100%;height:100%;
+            background:rgba(0,0,0,0.8);backdrop-filter:blur(4px);
+            z-index:1000;display:none;align-items:center;justify-content:center;
         }
+        .modal-content {
+            background:var(--surface);border:1px solid var(--border);
+            width:400px;padding:24px;border-radius:12px;
+            box-shadow:0 20px 60px rgba(0,0,0,0.6);
+        }
+        .modal-header { font-size:18px;font-weight:700;margin-bottom:16px;color:var(--green); }
+        .modal-body { font-size:13px;line-height:1.6;color:var(--text); }
+        .modal-footer { margin-top:20px;text-align:right; }
+        .close-btn { background:var(--surface-3);color:white;border:none;padding:8px 16px;border-radius:6px;cursor:pointer; }
 
-        .status-badge {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 6px 12px;
-            background: rgba(0, 200, 83, 0.1);
-            border-radius: 20px;
-            color: var(--success);
-            font-size: 12px;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
+        /* NEGOTIATION LOG */
+        .negotiation-log { flex:1;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;overflow-y:auto;display:flex;flex-direction:column; }
+        .log-entry { display:flex;gap:10px;font-size:12px;line-height:1.6;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.02);animation:fadeIn 0.4s; }
+        @keyframes fadeIn { from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)} }
+        .log-time { color:var(--text-muted);font-family:'JetBrains Mono',monospace;font-size:10px;min-width:60px;padding-top:2px; }
+        .log-content { flex:1; }
+        .log-content.sent { color:var(--primary); }
+        .log-content.received { color:var(--green); }
+        .log-content.status { color:var(--text-dim);font-style:italic;font-size:11px; }
 
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            background: var(--success);
-            border-radius: 50%;
-            box-shadow: 0 0 10px var(--success);
-            animation: pulse 2s infinite;
+        .msg-badge {
+            display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;
+            font-family:'JetBrains Mono',monospace;letter-spacing:0.5px;margin-right:6px;
         }
+        .msg-badge.rfq { background:rgba(59,130,246,0.15);color:#3B82F6; }
+        .msg-badge.quote { background:var(--amber-dim);color:var(--amber); }
+        .msg-badge.counter { background:var(--red-dim);color:var(--red); }
+        .msg-badge.exec { background:var(--green-dim);color:var(--green); }
+        .msg-badge.reject { background:var(--red-dim);color:var(--red); }
+        .price-tag { font-family:'JetBrains Mono',monospace;font-weight:700;font-size:13px; }
+        .qty-tag { color:var(--text-dim);font-size:11px; }
 
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.5; }
-            100% { opacity: 1; }
-        }
+        /* REASONING PANEL */
+        .reasoning-panel { background:var(--surface);border-left:1px solid var(--border);padding:16px;display:flex;flex-direction:column;gap:8px;overflow-y:auto; }
+        .reasoning-header { font-size:9px;color:var(--primary);letter-spacing:2px;text-transform:uppercase;font-weight:700;padding-bottom:8px;border-bottom:1px solid rgba(245,158,11,0.12); }
 
-        sidebar {
-            background: var(--surface);
-            border-right: 1px solid var(--border);
-            padding: 24px;
-            display: flex;
-            flex-direction: column;
-            gap: 32px;
-        }
+        .thinking-indicator { display:none;align-items:center;gap:8px;font-size:11px;color:var(--text-dim);padding:6px 0; }
+        .thinking-dots span { display:inline-block;width:4px;height:4px;background:var(--primary);border-radius:50%;animation:bounce 1.4s infinite;margin:0 1px; }
+        .thinking-dots span:nth-child(2){animation-delay:0.2s}.thinking-dots span:nth-child(3){animation-delay:0.4s}
+        @keyframes bounce { 0%,80%,100%{transform:translateY(0);opacity:0.3}40%{transform:translateY(-5px);opacity:1} }
 
-        .sidebar-section h2 {
-            font-size: 12px;
-            color: var(--text-dim);
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            margin-bottom: 16px;
-        }
+        .reasoning-entry { font-size:11px;color:var(--text-dim);line-height:1.7;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.02);animation:fadeIn 0.4s; }
+        .reasoning-entry.strategy { color:var(--primary);font-weight:500;border-left:2px solid var(--primary);padding-left:10px;font-size:12px;line-height:1.6; }
+        .analysis-entry { font-size:11px;color:var(--cyan);line-height:1.5;padding:6px 0;border-bottom:1px solid rgba(251,146,60,0.06);animation:fadeIn 0.4s; }
+        .analysis-entry::before { content:'◆ ';opacity:0.5; }
+        .analysis-entry.settlement { color:var(--green);border-bottom-color:rgba(34,197,94,0.06); }
 
-        .portfolio-card {
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 16px;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
+        ::-webkit-scrollbar { width:6px; }
+        ::-webkit-scrollbar-track { background:rgba(255,255,255,0.02); }
+        ::-webkit-scrollbar-thumb { 
+            background:rgba(245, 158, 11, 0.4); 
+            border-radius:10px;
+            border: 1px solid rgba(255,255,255,0.05);
         }
-
-        .asset-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .asset-label {
-            font-size: 14px;
-            color: var(--text-dim);
-        }
-
-        .asset-value {
-            font-family: 'JetBrains Mono', monospace;
-            font-weight: 500;
-        }
-
-        .session-info {
-            font-size: 14px;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-
-        .info-item {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-        }
-
-        .info-label {
-            color: var(--text-dim);
-            font-size: 12px;
-        }
-
-        .info-value {
-            color: var(--text);
-            word-break: break-all;
-        }
-
-        main {
-            padding: 32px;
-            display: grid;
-            grid-template-columns: 1fr 300px;
-            grid-template-rows: auto 1fr;
-            gap: 24px;
-            overflow: hidden;
-        }
-
-        .log-container {
-            grid-column: 1;
-            grid-row: 2;
-            background: rgba(22, 24, 33, 0.5);
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            padding: 24px;
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-            overflow-y: auto;
-        }
-
-        .reasoning-container {
-            grid-column: 2;
-            grid-row: 1 / 3;
-            background: rgba(255, 77, 0, 0.05);
-            border: 1px solid var(--primary);
-            border-radius: 16px;
-            padding: 24px;
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-            overflow-y: auto;
-        }
-
-        .reasoning-entry {
-            font-size: 13px;
-            font-style: italic;
-            color: var(--text-dim);
-            line-height: 1.6;
-            padding-bottom: 12px;
-            border-bottom: 1px solid rgba(255, 77, 0, 0.1);
-            animation: fadeIn 0.3s ease-out;
-        }
-
-        .blockchain-container {
-            grid-column: 1;
-            grid-row: 1;
-            background: rgba(0, 0, 0, 0.3);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 12px 16px;
-            font-size: 12px;
-            font-family: 'JetBrains Mono', monospace;
-            max-height: 100px;
-            overflow-y: auto;
-        }
-
-        .log-entry {
-            display: flex;
-            gap: 16px;
-            font-size: 14px;
-            line-height: 1.5;
-            padding-bottom: 12px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-            animation: fadeIn 0.3s ease-out;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .timestamp {
-            color: var(--text-dim);
-            font-family: 'JetBrains Mono', monospace;
-            min-width: 80px;
-        }
-
-        .entry-content {
-            flex: 1;
-        }
-
-        .entry-content.sent {
-            color: var(--primary);
-        }
-
-        .entry-content.received {
-            color: var(--success);
-        }
-
-        .execution-banner {
-            background: linear-gradient(90deg, rgba(255, 77, 0, 0.2) 0%, rgba(0, 200, 83, 0.2) 100%);
-            border: 1px solid var(--primary);
-            border-radius: 12px;
-            padding: 20px;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            animation: slideIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        }
-
-        @keyframes slideIn {
-            from { transform: scale(0.9); opacity: 0; }
-            to { transform: scale(1); opacity: 1; }
-        }
-
-        ::-webkit-scrollbar {
-            width: 8px;
-        }
-
-        ::-webkit-scrollbar-track {
-            background: transparent;
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 10px;
-        }
+        ::-webkit-scrollbar-thumb:hover { background:rgba(245, 158, 11, 0.6); }
     </style>
 </head>
 <body>
@@ -295,20 +214,19 @@
         <header>
             <div class="logo-section">
                 <div class="logo-icon">MT</div>
-                <div class="logo-text">
-                    <h1>MERIDIAN TRADING</h1>
-                    <p style="font-size: 12px; color: var(--text-dim);">Market Making Agent</p>
-                </div>
+                <div class="logo-text"><h1>MERIDIAN TRADING</h1><p>Market Making Agent</p></div>
             </div>
-            <div class="status-badge">
-                <div class="status-dot"></div>
-                Agent Live
+            <div class="header-right">
+                <span id="status-text">Initializing...</span>
+                <div class="phase-badge" id="phase-badge" data-phase="BOOTING">
+                    <div class="phase-dot"></div><span id="phase-label">BOOTING</span>
+                </div>
             </div>
         </header>
 
-        <sidebar>
-            <div class="sidebar-section">
-                <h2>Inventory</h2>
+        <div class="sidebar">
+            <div>
+                <div class="section-label">Inventory</div>
                 <div class="portfolio-card">
                     <div class="asset-row">
                         <span class="asset-label">SYN</span>
@@ -316,160 +234,237 @@
                     </div>
                     <div class="asset-row">
                         <span class="asset-label">USDC</span>
-                        <span class="asset-value" id="val-usdc">$0.00</span>
+                        <span class="asset-value" id="val-usdc">$0</span>
+                    </div>
+                    <div class="asset-row reserve-row" id="reserve-row" style="display:none">
+                        <span class="reserve-label">📦 Pending Sale</span>
+                        <span class="reserve-value" id="val-reserved">0 SYN</span>
                     </div>
                 </div>
             </div>
 
-            <div class="sidebar-section">
-                <h2>Active Session</h2>
-                <div class="session-info">
-                    <div class="info-item">
-                        <span class="info-label">Connected to</span>
-                        <span class="info-value" id="session-remote">Waiting...</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="info-label">Session PDA</span>
-                        <span class="info-value" id="session-pda">None</span>
-                    </div>
+            <div>
+                <div class="section-label">Market Price Flow</div>
+                <div class="chart-card">
+                    <svg id="price-chart" viewBox="0 0 200 60">
+                        <path id="chart-path" d="M 0 60" fill="none" stroke="var(--primary)" stroke-width="1.5" />
+                    </svg>
                 </div>
             </div>
-        </sidebar>
 
-        <main>
-            <div class="blockchain-container" id="blockchain-container">
-                <div style="color: var(--text-dim)">[System] Awaiting on-chain activity...</div>
+            <div>
+                <div class="section-label">Trade History</div>
+                <div class="trades-card" id="trades-list"></div>
             </div>
 
-            <div class="reasoning-container" id="reasoning-container">
-                <h2 style="font-size: 12px; color: var(--primary); letter-spacing: 2px; text-transform: uppercase;">Agent Reasoning</h2>
-                <div id="reasoning-content" style="color: var(--text-dim); font-size: 13px;">Agent listening for incoming RFQs.</div>
-            </div>
-
-            <div class="log-container" id="log-container">
-                <div id="execution-banner" class="execution-banner" style="margin-bottom: 16px;">
-                    <div>
-                        <h3>✓ TRADE EXECUTED</h3>
-                        <p id="execution-text">Sold 500,000 SYN @ $0.455</p>
+            <div>
+                <div class="section-label">Live Deal</div>
+                <div class="deal-tracker" id="deal-tracker">
+                    <div class="deal-header">
+                        <div class="deal-price"><div class="deal-price-label">Their Bid</div><div class="deal-price-value bid" id="deal-bid">—</div></div>
+                        <div class="deal-price"><div class="deal-price-label">Spread</div><div class="deal-price-value" id="deal-spread" style="color:var(--amber)">—</div></div>
+                        <div class="deal-price"><div class="deal-price-label">Our Ask</div><div class="deal-price-value ask" id="deal-ask">—</div></div>
                     </div>
+                    <div class="spread-bar-container"><div class="spread-bar" id="spread-bar" style="width:0%;background:var(--red)"></div></div>
+                    <div class="deal-qty" id="deal-qty">—</div>
+                    <div class="deal-value" id="deal-value">—</div>
+                    <div class="deal-status" id="deal-status">Awaiting inbound RFQ</div>
                 </div>
+            </div>
+
+            <div>
+                <div class="section-label">Session</div>
+                <div class="session-card">
+                    <div class="info-row"><span class="info-label">Connected To</span><span class="info-value" id="session-remote">Listening...</span></div>
+                    <div class="info-row"><span class="info-label">Session PDA</span><span class="info-value" id="session-pda">—</span></div>
+                </div>
+            </div>
+
+            <div>
+                <div class="section-label">Encryption</div>
+                <div class="crypto-section" id="crypto-log">
+                    <div class="crypto-entry" style="opacity:0.4">Awaiting crypto ops...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-area">
+            <div id="execution-toast" class="execution-toast">
+                <h3>✓ TRADE EXECUTED</h3>
+                <p id="toast-text"></p>
+                <button class="review-btn" onclick="showTradeReview()">Review Trade</button>
+            </div>
+
+            <div class="blockchain-strip" id="blockchain-strip">
+                <div style="color:var(--text-muted)">⛓ Awaiting on-chain activity...</div>
+            </div>
+            
+            <div class="negotiation-log" id="negotiation-log">
                 <div id="messages-log"></div>
             </div>
-        </main>
+        </div>
+
+        <div class="reasoning-panel">
+            <div class="reasoning-header">Agent Reasoning</div>
+            <div class="thinking-indicator" id="thinking-indicator">
+                <div class="thinking-dots"><span></span><span></span><span></span></div>
+                <span>Evaluating position...</span>
+            </div>
+            <div id="reasoning-content"></div>
+        </div>
+    </div>
+
+    <div id="modal-overlay" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">Trade Execution Review</div>
+            <div class="modal-body" id="modal-body"></div>
+            <div class="modal-footer">
+                <button class="close-btn" onclick="closeModal()">Close</button>
+            </div>
+        </div>
     </div>
 
     <script>
-        const logContainer = document.getElementById('messages-log');
-        const usdcVal = document.getElementById('val-usdc');
-        const synVal = document.getElementById('val-syn');
-        const sessionRemote = document.getElementById('session-remote');
-        const sessionPda = document.getElementById('session-pda');
-        const executionBanner = document.getElementById('execution-banner');
-        const executionText = document.getElementById('execution-text');
-        const reasoningContent = document.getElementById('reasoning-content');
-        const blockchainContainer = document.getElementById('blockchain-container');
+        const $ = id => document.getElementById(id);
+        let prices = [48, 49, 47, 48, 50]; 
+
+        function updateChart(price) {
+            const normalized = Math.max(0, Math.min(60, (price - 0.40) * 1000));
+            prices.push(60 - normalized / 10);
+            if (prices.length > 20) prices.shift();
+            let d = "M 0 " + prices[0];
+            for (let i = 1; i < prices.length; i++) {
+                d += ` L ${(i * 200) / (prices.length - 1)} ${prices[i]}`;
+            }
+            $('chart-path').setAttribute('d', d);
+        }
+
+        function animateValue(el, start, end, suffix, duration) {
+            if (start === end) return;
+            const range = end - start;
+            const startTime = performance.now();
+            const isNeg = end < start;
+            el.classList.add(isNeg ? 'flash-red' : 'flash-green');
+            function step(now) {
+                const elapsed = now - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                const current = start + range * progress;
+                el.textContent = (suffix === '$' ? '$' : '') + Math.round(current).toLocaleString();
+                if (progress < 1) requestAnimationFrame(step);
+                else setTimeout(() => el.classList.remove('flash-red', 'flash-green'), 1500);
+            }
+            requestAnimationFrame(step);
+        }
+
+        let prevUSDC = 0, prevSYN = 2000000, prevReserved = 0;
+        let lastTrade = null;
 
         function addLog(message, type) {
-            const entry = document.createElement('div');
-            entry.className = 'log-entry';
-            const now = new Date();
-            const timeStr = now.getHours().toString().padStart(2, '0') + ':' + 
-                          now.getMinutes().toString().padStart(2, '0') + ':' + 
-                          now.getSeconds().toString().padStart(2, '0');
-            
-            entry.innerHTML = `
-                <div class="timestamp">[${timeStr}]</div>
-                <div class="entry-content ${type}">${message}</div>
+            const e = document.createElement('div');
+            e.className = 'log-entry';
+            e.innerHTML = `<div class="log-time">${new Date().toLocaleTimeString()}</div><div class="log-content ${type}">${message}</div>`;
+            $('messages-log').prepend(e);
+        }
+
+        function addTrade(trade) {
+            const row = document.createElement('div');
+            row.className = 'trade-row';
+            row.innerHTML = `<span>${new Date().toLocaleTimeString()}</span><span class="trade-qty">${trade.quantity.toLocaleString()}</span><span class="trade-price">$${trade.price}</span>`;
+            $('trades-list').prepend(row);
+            lastTrade = trade;
+            updateChart(trade.price);
+        }
+
+        function showTradeReview() {
+            if (!lastTrade) return;
+            $('modal-body').innerHTML = `
+                <p><strong>Asset:</strong> SYN</p>
+                <p><strong>Quantity:</strong> ${lastTrade.quantity.toLocaleString()} units</p>
+                <p><strong>Price:</strong> $${lastTrade.price}</p>
+                <p><strong>Total Value:</strong> $${(lastTrade.quantity * lastTrade.price).toLocaleString()}</p>
+                <p style="margin-top:10px;color:var(--text-dim);font-style:italic">Strategy: Premium liquidation to optimize inventory exposure.</p>
             `;
-            logContainer.prepend(entry);
+            $('modal-overlay').style.display = 'flex';
         }
 
-        function addBlockchain(sig, desc) {
-            const entry = document.createElement('div');
-            entry.style.marginBottom = '4px';
-            const shortSig = sig.slice(0, 8) + '...';
-            entry.innerHTML = `<span style="color: var(--primary)">[TX]</span> ${desc} <a href="https://explorer.solana.com/tx/${sig}?cluster=devnet" target="_blank" style="color: var(--text-dim); text-decoration: none;">(${shortSig} ↗)</a>`;
-            blockchainContainer.prepend(entry);
-        }
-
-        function addReasoning(text) {
-            const entry = document.createElement('div');
-            entry.className = 'reasoning-entry';
-            entry.innerText = text;
-            reasoningContent.prepend(entry);
-        }
+        function closeModal() { $('modal-overlay').style.display = 'none'; }
 
         const ws = new WebSocket('ws://localhost:3002');
-
-        ws.onopen = () => {
-            addLog('Agent Listening on Devnet...', '');
-        };
-
         ws.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            
-            switch (data.event) {
+            const d = JSON.parse(event.data);
+            switch (d.event) {
+                case 'phase_change':
+                    $('phase-badge').setAttribute('data-phase', d.phase);
+                    $('phase-label').textContent = d.phase;
+                    break;
                 case 'session_opened':
-                    sessionRemote.innerText = data.remoteFirm;
-                    sessionPda.innerText = data.sessionPDA;
-                    addLog(`Connection accepted from ${data.remoteFirm}`, '');
+                    $('session-remote').innerText = d.remoteFirm;
+                    $('session-pda').innerText = d.sessionPDA;
                     break;
-
-                case 'message_sent':
-                    handleMessage(data.message, 'sent');
+                case 'message_sent': handleMessage(d.message, 'sent'); break;
+                case 'message_received': handleMessage(d.message, 'received'); $('thinking-indicator').style.display = 'flex'; break;
+                case 'portfolio_updated': {
+                    const u = d.portfolio.USDC, s = d.portfolio.SYN, r = d.portfolio.pendingSale || 0;
+                    if (u !== prevUSDC) animateValue($('val-usdc'), prevUSDC, u, '$', 800);
+                    if (s !== prevSYN) animateValue($('val-syn'), prevSYN, s, '', 800);
+                    if (r > 0) { $('reserve-row').style.display = 'flex'; $('val-reserved').textContent = r.toLocaleString() + ' SYN'; }
+                    else $('reserve-row').style.display = 'none';
+                    prevUSDC = u; prevSYN = s; prevReserved = r;
                     break;
-
-                case 'message_received':
-                    handleMessage(data.message, 'received');
+                }
+                case 'deal_update': updateDeal(d); break;
+                case 'trade_executed': addTrade(d.trade); break;
+                case 'reasoning': addReasoning(d.text); break;
+                case 'internal_analysis': addAnalysis(d.text); break;
+                case 'crypto_event': {
+                    const e = document.createElement('div');
+                    e.className = 'crypto-entry'; e.innerText = d.message;
+                    $('crypto-log').prepend(e);
                     break;
-
-                case 'portfolio_updated':
-                    usdcVal.innerText = '$' + data.portfolio.USDC.toLocaleString(undefined, {minimumFractionDigits: 2});
-                    synVal.innerText = data.portfolio.SYN.toLocaleString();
+                }
+                case 'blockchain_tx': {
+                    const e = document.createElement('div');
+                    e.className = 'tx-entry';
+                    e.innerHTML = `<span style="color:var(--primary)">⛓</span> ${d.description} <a href="https://explorer.solana.com/tx/${d.signature}?cluster=devnet" target="_blank">(${d.signature.slice(0,8)}... ↗)</a>`;
+                    $('blockchain-strip').prepend(e);
                     break;
-
-                case 'reasoning':
-                    addReasoning(data.text);
-                    break;
-
-                case 'blockchain_tx':
-                    addBlockchain(data.signature, data.description);
-                    break;
-
-                case 'status':
-                    addLog(data.message, 'status');
+                }
+                case 'status': $('status-text').innerText = d.message; addLog(d.message, 'status'); break;
+                case 'price_update': updateChart(d.price); break;
+                case 'execution_complete':
+                    $('thinking-indicator').style.display = 'none';
+                    $('toast-text').innerText = `Sold ${d.quantity.toLocaleString()} SYN @ $${d.price}`;
+                    $('execution-toast').style.display = 'block';
+                    setTimeout(() => $('execution-toast').style.display = 'none', 5000);
                     break;
             }
         };
 
-        function handleMessage(msg, direction) {
-            const prefix = direction === 'sent' ? '→' : '←';
-            let text = '';
-
-            switch (msg.type) {
-                case 'rfq':
-                    text = `${prefix} RFQ: ${msg.side.toUpperCase()} ${msg.quantity.toLocaleString()} ${msg.asset}`;
-                    break;
-                case 'quote':
-                    text = `${prefix} Quote: $${msg.price} / ${msg.asset}`;
-                    break;
-                case 'counter':
-                    text = `${prefix} Counter: $${msg.price}`;
-                    break;
-                case 'execution':
-                    text = `${prefix} EXECUTION AGREED @ $${msg.price}`;
-                    executionBanner.style.display = 'flex';
-                    executionText.innerText = `Sold ${msg.quantity.toLocaleString()} ${msg.asset} @ $${msg.price}`;
-                    break;
-                case 'reject':
-                    text = `${prefix} Rejected: ${msg.reason}`;
-                    break;
-                case 'status':
-                    text = `i ${msg.message}`;
-                    break;
+        function updateDeal(data) {
+            if (data.bid > 0) $('deal-bid').textContent = '$'+data.bid.toFixed(3);
+            if (data.ask > 0) $('deal-ask').textContent = '$'+data.ask.toFixed(3);
+            if (data.bid > 0 && data.ask > 0) {
+                const spread = data.ask - data.bid;
+                $('deal-spread').textContent = '$'+spread.toFixed(3);
+                const pct = Math.max(0, Math.min(100, (1 - spread / 0.08) * 100));
+                $('spread-bar').style.width = pct + '%';
+                $('spread-bar').style.background = pct > 80 ? 'var(--green)' : pct > 50 ? 'var(--amber)' : 'var(--red)';
             }
+            if (data.quantity > 0) $('deal-qty').textContent = data.quantity.toLocaleString() + ' SYN';
+            if (data.status) $('deal-status').textContent = data.status;
+        }
 
-            addLog(text, direction);
+        function handleMessage(msg, dir) {
+            const arrow = dir === 'sent' ? '→' : '←';
+            let html = '';
+            switch (msg.type) {
+                case 'rfq': html = `<span class="msg-badge rfq">RFQ</span> ${arrow} ${msg.side.toUpperCase()} <span class="price-tag">${msg.quantity.toLocaleString()}</span> ${msg.asset}`; break;
+                case 'quote': html = `<span class="msg-badge quote">QUOTE</span> ${arrow} <span class="price-tag">$${msg.price}</span> × ${msg.quantity.toLocaleString()} ${msg.asset}`; break;
+                case 'counter': html = `<span class="msg-badge counter">COUNTER</span> ${arrow} <span class="price-tag">$${msg.price}</span> × ${msg.quantity.toLocaleString()} ${msg.asset}`; break;
+                case 'execution': html = `<span class="msg-badge exec">EXECUTED</span> ${arrow} <span class="price-tag">$${msg.price}</span> × ${msg.quantity.toLocaleString()} ${msg.asset}`; break;
+                case 'reject': html = `<span class="msg-badge reject">REJECTED</span> ${arrow} ${msg.reason}`; break;
+            }
+            addLog(html, dir);
         }
     </script>
 </body>

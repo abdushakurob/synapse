@@ -1,6 +1,7 @@
 import { PublicKey } from "@solana/web3.js";
 import { Program, Idl, BN } from "@coral-xyz/anchor";
 import idl from "./idl.json";
+import { ConnectionTimeoutError } from "./errors";
 
 export interface SessionRecord {
   sessionPDA: PublicKey;
@@ -19,6 +20,7 @@ export interface SignalingAdapter {
   waitForAnswer(sessionPDA: PublicKey, timeoutMs?: number): Promise<Uint8Array>;
   getSession(sessionPDA: PublicKey): Promise<SessionRecord | undefined>;
   listSessions(responder: PublicKey): Promise<SessionRecord[]>;
+  closeSession(sessionPDA: PublicKey): Promise<string>;
   onNewSession?(responder: PublicKey, callback: (session: SessionRecord) => void): void;
 }
 
@@ -93,6 +95,11 @@ export class InMemorySignalingAdapter implements SignalingAdapter {
       (s) => s.responder.equals(responder) && s.status === "pending"
     );
   }
+
+  async closeSession(sessionPDA: PublicKey): Promise<string> {
+    this.sessions.delete(sessionPDA.toBase58());
+    return "local_dummy_sig_" + Math.random().toString(36).substring(7);
+  }
 }
 
 /**
@@ -160,6 +167,17 @@ export class SolanaSignalingAdapter implements SignalingAdapter {
     return signature;
   }
 
+  async closeSession(sessionPDA: PublicKey): Promise<string> {
+    const signature = await (this.program.methods as any)
+      .closeSession()
+      .accounts({
+        session: sessionPDA,
+        initiator: this.program.provider.publicKey,
+      })
+      .rpc();
+    return signature;
+  }
+
   async waitForAnswer(sessionPDA: PublicKey, timeoutMs = 30000): Promise<Uint8Array> {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
@@ -169,7 +187,7 @@ export class SolanaSignalingAdapter implements SignalingAdapter {
       }
       await new Promise((r) => setTimeout(r, 2000));
     }
-    throw new Error(`Timeout waiting for answer on-chain for ${sessionPDA.toBase58()}`);
+    throw new ConnectionTimeoutError(`[Signaling] Timeout waiting for answer on-chain for ${sessionPDA.toBase58()}`);
   }
 
   async getSession(sessionPDA: PublicKey): Promise<SessionRecord | undefined> {

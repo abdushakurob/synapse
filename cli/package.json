@@ -28,7 +28,8 @@
     "@solana/web3.js": "^1.87.0",
     "@synapse-io/sdk": "^0.1.5",
     "bs58": "^6.0.0",
-    "commander": "^11.1.0"
+    "commander": "^11.1.0",
+    "enquirer": "^2.4.1"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
