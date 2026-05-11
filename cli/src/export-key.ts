@@ -1,11 +1,11 @@
 import * as fs from "fs";
+import * as path from "path";
 import bs58 from "bs58";
-import { getProfilePath } from "./utils";
+import { getProfilePath, listProfiles } from "./utils";
 
 /**
  * Exports the profile keypair as a Base58 string.
- * This is used for easy copy-pasting into Environment Variables
- * (e.g., SYNAPSE_SECRET_KEY) for Cloud/Railway deployment.
+ * Guides the user if multiple profiles exist or the requested one is missing.
  */
 export async function exportKey(options: { profile: string, file?: string }) {
   let walletPath: string;
@@ -20,7 +20,27 @@ export async function exportKey(options: { profile: string, file?: string }) {
     label = `PROFILE [ ${profile} ]`;
 
     if (!fs.existsSync(walletPath)) {
-      throw new Error(`Profile '${profile}' not found. Run 'synapse init --profile ${profile}' first or use --file <path>.`);
+      const availableProfiles = listProfiles();
+      const localWallets = fs.readdirSync(process.cwd())
+        .filter(f => f.startsWith("dev-wallet") && f.endsWith(".json"));
+
+      console.log(`\n[CLI] ERROR: Profile '${profile}' not found.`);
+      
+      if (availableProfiles.length > 0 || localWallets.length > 0) {
+        console.log(`\nAvailable Projects/Profiles:`);
+        if (availableProfiles.length > 0) {
+          console.log(`  Managed Profiles (use --profile <name>):`);
+          availableProfiles.forEach(p => console.log(`    - ${p}`));
+        }
+        if (localWallets.length > 0) {
+          console.log(`  Local Wallets (use --file <path>):`);
+          localWallets.forEach(w => console.log(`    - ${w}`));
+        }
+        console.log("");
+        return;
+      } else {
+        throw new Error(`No profiles found. Run 'synapse init' to create one.`);
+      }
     }
   }
 

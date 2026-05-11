@@ -15,8 +15,16 @@ export function getProfilePath(profileName: string = "default"): string {
 }
 
 /**
- * Returns the base .synapse directory
+ * Returns a list of all available profile names.
  */
+export function listProfiles(): string[] {
+  const profilesDir = path.join(os.homedir(), ".synapse", "profiles");
+  if (!fs.existsSync(profilesDir)) return [];
+  return fs.readdirSync(profilesDir)
+    .filter(f => f.endsWith(".json"))
+    .map(f => f.replace(".json", ""));
+}
+
 export function getConfigDir(): string {
   const configDir = path.join(os.homedir(), ".synapse");
   if (!fs.existsSync(configDir)) {

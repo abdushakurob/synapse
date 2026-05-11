@@ -223,7 +223,9 @@ export function AgentDashboard({ firmName, wsPort, accentColor }: AgentDashboard
             <div className="space-y-2">
                <div className="flex justify-between text-[10px] font-mono">
                   <span className="opacity-40 uppercase text-[8px]">Session</span>
-                  <span className={activeSession ? "text-emerald-500" : "text-white/20"}>{activeSession ? "Active" : "Ready"}</span>
+                  <span className={activeSession ? "text-emerald-500" : isConnected ? "text-amber-500 animate-pulse" : "text-white/20"}>
+                    {activeSession ? "Active" : isConnected ? "Handshaking" : "Offline"}
+                  </span>
                </div>
                <div className="flex justify-between text-[10px] font-mono">
                   <span className="opacity-40 uppercase text-[8px]">Encrypted</span>
@@ -264,7 +266,7 @@ export function AgentDashboard({ firmName, wsPort, accentColor }: AgentDashboard
                 <div>
                    <div className="text-[9px] font-bold text-white/30 uppercase tracking-widest mb-0.5">Execution Status</div>
                    <div className="font-mono text-sm font-bold text-white/60 uppercase">
-                      {isThinking ? "Reasoning Strategy..." : activeSession ? 'Handshake Secure' : 'Scanning Mempool'}
+                      {isThinking ? "Reasoning Strategy..." : activeSession ? 'Handshake Secure' : isConnected ? 'Agent Synchronized' : 'Scanning Mempool'}
                    </div>
                 </div>
              </div>
@@ -387,7 +389,9 @@ export function AgentDashboard({ firmName, wsPort, accentColor }: AgentDashboard
                       {logs.length === 0 ? (
                         <div className="h-full flex flex-col items-center justify-center opacity-5">
                           <Cpu className="w-32 h-32 mb-8 animate-pulse" />
-                          <div className="text-3xl font-black italic tracking-[0.5em] uppercase">Ready for Sync</div>
+                          <div className="text-3xl font-black italic tracking-[0.5em] uppercase">
+                            {isConnected ? "Handshake Initialized" : "Ready for Sync"}
+                          </div>
                         </div>
                       ) : (
                         logs.map((log, i) => (
@@ -517,7 +521,7 @@ export function AgentDashboard({ firmName, wsPort, accentColor }: AgentDashboard
                             <div className="w-4 h-4 bg-primary rounded-full animate-ping"></div>
                          </div>
                          <div className="text-[10px] font-bold uppercase tracking-widest text-center">
-                            Scanning P2P Layer...
+                            {isConnected ? "Awaiting Peer Signal..." : "Scanning P2P Layer..."}
                          </div>
                       </div>
                     )}

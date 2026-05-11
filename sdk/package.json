@@ -1,6 +1,6 @@
 {
   "name": "@synapse-io/sdk",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Synapse decentralized communication protocol SDK",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
