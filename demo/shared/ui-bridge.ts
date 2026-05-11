@@ -11,6 +11,15 @@ export class UIBridge {
 
   constructor(port: number) {
     this.wss = new WebSocketServer({ port });
+
+    // Handle plain HTTP GET for health checks (Fly.io/Railway)
+    (this.wss as any)._server.on("request", (req: any, res: any) => {
+      if (req.method === "GET") {
+        res.writeHead(200);
+        res.end("OK");
+      }
+    });
+
     this.wss.on("connection", (ws) => {
       this.clients.add(ws);
       
