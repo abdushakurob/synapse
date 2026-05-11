@@ -1,0 +1,20 @@
+{
+  "name": "synapse-monorepo",
+  "private": true,
+  "workspaces": [
+    "sdk",
+    "demo",
+    "cli",
+    "web"
+  ],
+  "scripts": {
+    "install-all": "npm install",
+    "build-sdk": "npm run build -w sdk",
+    "agent-a": "npm run agent-a -w demo",
+    "agent-b": "npm run agent-b -w demo"
+  },
+  "dependencies": {
+    "ts-node": "^10.9.2",
+    "typescript": "^5.0.0"
+  }
+}
