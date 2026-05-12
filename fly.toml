@@ -1,4 +1,4 @@
-# fly.toml configuration for Synapse Agents (Consolidated V2)
+# fly.toml configuration for Synapse Agents (Hardened V2)
 app = "synapse-agents"
 primary_region = "ord"
 
@@ -21,6 +21,13 @@ primary_region = "ord"
     port = 443
     handlers = ["http", "tls"]
 
+  [[services.http_checks]]
+    interval = "10s"
+    timeout = "2s"
+    method = "get"
+    path = "/"
+    grace_period = "30s"
+
 # Service for Agent B (Secondary Dashboard)
 [[services]]
   internal_port = 3002
@@ -32,3 +39,10 @@ primary_region = "ord"
   [[services.ports]]
     port = 3002
     handlers = ["http", "tls"]
+
+  [[services.http_checks]]
+    interval = "10s"
+    timeout = "2s"
+    method = "get"
+    path = "/"
+    grace_period = "30s"
