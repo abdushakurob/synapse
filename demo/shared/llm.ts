@@ -7,8 +7,8 @@ dotenv.config();
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
 const TOGETHER_API_KEY = process.env.TOGETHER_API_KEY;
-// The default community relay. User should replace this with their hosted relay URL.
-const DEFAULT_RELAY = "https://relay.synapse-io.com/v1"; 
+// The default community relay hosted on Render.
+const DEFAULT_RELAY = "https://synapse-relay.onrender.com/v1"; 
 const RELAY_URL = process.env.SYNAPSE_RELAY_URL || (TOGETHER_API_KEY ? "https://api.together.xyz/v1" : DEFAULT_RELAY);
 
 export class RateLimitedError extends Error {
@@ -17,6 +17,8 @@ export class RateLimitedError extends Error {
     this.name = "RateLimitedError";
   }
 }
+
+import OpenAI from "openai";
 
 export function validateKey() {
   // Always valid to start because we have a default relay
