@@ -39,26 +39,36 @@ interface AgentDashboardProps {
 }
 
 export function AgentDashboard({ firmName, wsPort, accentColor }: AgentDashboardProps) {
-   const {
-      isConnected,
-      logs,
-      portfolio,
+    const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsHost = window.location.hostname === "localhost" ? "localhost" : "synapse-demo.fly.dev";
+    // Fly.io routes port 3001 to 80/443, but 3002 stays on 3002
+    const finalPort = (wsHost !== "localhost" && wsPort === 3001) ? "" : `:${wsPort}`;
+    const wsUrl = `${wsProtocol}//${wsHost}${finalPort}`;
+
+    const { 
+      connected: isConnected, 
+      messages: logs, 
+      reasoningLogs, 
+      portfolio, 
       portfolioHistory,
       activeSession,
+      activeSessions,
       transactions,
       hasStarted,
+      phase, 
       isComplete,
-      finalReport,
+      finalReport, 
       negotiationHistory,
       tradeLedger,
       latency,
       messageCount,
       bytesTransferred,
       sessionStartTime,
+      tradeAnalytics,
       startNegotiation,
       resetDemo,
       dismissComplete
-   } = useAgentSocket(`ws://localhost:${wsPort}`);
+    } = useAgentSocket(wsUrl);
 
    const scrollRef = useRef<HTMLDivElement>(null);
    const [countdown, setCountdown] = useState<number | null>(null);
