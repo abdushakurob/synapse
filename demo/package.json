@@ -13,7 +13,9 @@
     "bs58": "^6.0.0",
     "dotenv": "^16.3.1",
     "openai": "^4.0.0",
-    "ws": "^8.0.0",
+    "ws": "^8.0.0"
+  },
+  "optionalDependencies": {
     "wrtc": "^0.4.7"
   },
   "devDependencies": {
