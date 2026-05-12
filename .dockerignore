@@ -8,6 +8,6 @@ npm-debug.log
 yarn-debug.log
 yarn-error.log
 .env
-dev-wallet*.json
+# dev-wallet*.json
 program/target
 web/dist
