@@ -1,5 +1,5 @@
-# Authentic Synapse P2P Container
-FROM node:18-bullseye
+# Absolute Synapse P2P Container (Node 20 Optimized)
+FROM node:20-bullseye
 
 # Install FULL WebRTC build and runtime dependencies
 RUN apt-get update && apt-get install -y \
@@ -30,6 +30,9 @@ RUN apt-get update && apt-get install -y \
     libxtst-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Install global native build helpers
+RUN npm install -g node-pre-gyp
+
 WORKDIR /app
 
 # Copy monorepo config
@@ -38,9 +41,8 @@ COPY sdk/package*.json ./sdk/
 COPY demo/package*.json ./demo/
 COPY cli/package*.json ./cli/
 
-# Install dependencies and REBUILD wrtc from source for this OS
-RUN npm install --legacy-peer-deps && \
-    npm rebuild wrtc --build-from-source
+# Install dependencies with native build enforcement
+RUN npm install --legacy-peer-deps
 
 # Copy source code
 COPY . .
