@@ -1,5 +1,5 @@
-# Hardened Synapse Agent Container (Native Build Optimized)
-FROM node:20-bullseye
+# Authentic Synapse P2P Container
+FROM node:18-bullseye
 
 # Install FULL WebRTC build and runtime dependencies
 RUN apt-get update && apt-get install -y \
@@ -38,9 +38,9 @@ COPY sdk/package*.json ./sdk/
 COPY demo/package*.json ./demo/
 COPY cli/package*.json ./cli/
 
-# Install dependencies (Forcing native build for wrtc)
-# We use --legacy-peer-deps to avoid monorepo linking issues during build
-RUN npm install --legacy-peer-deps
+# Install dependencies and REBUILD wrtc from source for this OS
+RUN npm install --legacy-peer-deps && \
+    npm rebuild wrtc --build-from-source
 
 # Copy source code
 COPY . .
@@ -50,7 +50,7 @@ RUN npm run build -w sdk
 
 EXPOSE 10000
 
-# Run with transpile-only for speed
+# Run both agents in parallel on the shared boardroom port
 CMD (npx ts-node --transpile-only demo/agent-a/index.ts) & \
     sleep 5 && \
     (npx ts-node --transpile-only demo/agent-b/index.ts) & \

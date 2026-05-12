@@ -6,32 +6,9 @@ import Peer from "simple-peer";
  * The SDK loads it lazily to avoid breaking the CLI for users who don't need P2P.
  */
 function getWrtc() {
-  const path = require("path");
-  const fs = require("fs");
-  
   try {
     return require("wrtc");
   } catch (e) {
-    const searchPaths = [
-      process.cwd(),
-      path.join(process.cwd(), "node_modules"),
-      path.join(process.cwd(), "sdk/node_modules"),
-      path.join(process.cwd(), "demo/node_modules"),
-      "/app/node_modules",
-      "/app/sdk/node_modules"
-    ];
-
-    for (const p of searchPaths) {
-      try {
-        const resolved = require.resolve("wrtc", { paths: [p] });
-        if (resolved) return require(resolved);
-      } catch (err) {}
-    }
-
-    console.error(`[Synapse SDK] FATAL: wrtc not found.`);
-    console.error(`[Synapse SDK] CWD: ${process.cwd()}`);
-    console.error(`[Synapse SDK] App Root Contents: ${fs.readdirSync("/app").join(", ")}`);
-    
     throw new Error(
       "[Synapse SDK] The 'wrtc' dependency is missing. " +
       "This is required for P2P connections in Node.js environments. " +
