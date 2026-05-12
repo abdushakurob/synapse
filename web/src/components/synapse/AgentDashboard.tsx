@@ -46,16 +46,13 @@ export function AgentDashboard({ firmName, wsPort, accentColor }: AgentDashboard
     const wsUrl = `${wsProtocol}//${wsHost}${finalPort}`;
 
     const { 
-      connected: isConnected, 
-      messages: logs, 
-      reasoningLogs, 
+      isConnected, 
+      logs, 
       portfolio, 
       portfolioHistory,
       activeSession,
-      activeSessions,
       transactions,
       hasStarted,
-      phase, 
       isComplete,
       finalReport, 
       negotiationHistory,
@@ -64,7 +61,6 @@ export function AgentDashboard({ firmName, wsPort, accentColor }: AgentDashboard
       messageCount,
       bytesTransferred,
       sessionStartTime,
-      tradeAnalytics,
       startNegotiation,
       resetDemo,
       dismissComplete
