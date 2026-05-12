@@ -40,7 +40,7 @@ interface AgentDashboardProps {
 
 export function AgentDashboard({ firmName, wsPort, accentColor }: AgentDashboardProps) {
     const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsHost = window.location.hostname === "localhost" ? "localhost" : "synapse-agents.fly.dev";
+    const wsHost = window.location.hostname === "localhost" ? "localhost" : "synapse-demo.fly.dev";
     // Fly.io routes port 3001 to 80/443, but 3002 stays on 3002
     const finalPort = (wsHost !== "localhost" && wsPort === 3001) ? "" : `:${wsPort}`;
     const wsUrl = `${wsProtocol}//${wsHost}${finalPort}`;

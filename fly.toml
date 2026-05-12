@@ -1,5 +1,5 @@
 # fly.toml configuration for Synapse Agents (Hardened V2)
-app = "synapse-agents"
+app = "synapse-demo"
 primary_region = "ord"
 
 [build]
