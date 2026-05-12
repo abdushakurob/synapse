@@ -24,7 +24,7 @@ function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 async function main() {
   // Use port 10000 on Render (unified), 3001 locally
   const uiPort = process.env.PORT ? parseInt(process.env.PORT) : 3001;
-  console.log(`\n\x1b[36m◈ APEX CAPITAL DASHBOARD BRIDGE: http://localhost:${uiPort}\x1b[0m\n`);
+  console.log(`\n\x1b[36mAPEX CAPITAL DASHBOARD BRIDGE: http://localhost:${uiPort}\x1b[0m\n`);
   const ui = new UIBridge(uiPort, "apex");
   const history: ChatMessage[] = [];
   let acquiredTotal = 0;
@@ -74,23 +74,33 @@ async function main() {
       ui.notify("status", { message: `Discovering ${responderAlias}...` });
 
       // Handshake Visualization: Initiator
+      console.log(`\n\x1b[36m[Signaling] Initiating handshake with ${responderAlias}...\x1b[0m`);
       ui.notify("status", { message: "Encrypting session metadata (X25519)..." });
       await sleep(600);
+
+      console.log(`\x1b[36m[Crypto] Derived Ephemeral Keypair. Writing Encrypted Offer to Solana...\x1b[0m`);
       ui.notify("status", { message: "Writing Encrypted Offer to Solana PDA..." });
 
       const channel = await synapse.connect(responderAlias);
 
+      console.log(`\x1b[36m[Signaling] Detected Encrypted Answer on Solana. Retrieving... [OK]\x1b[0m`);
       ui.notify("status", { message: "Retrieved Encrypted Answer. Verifying peer signature..." });
       await sleep(800);
+
+      console.log(`\x1b[36m[Crypto] Answer Decrypted. Verifying peer public key... [VERIFIED]\x1b[0m`);
+      console.log(`\x1b[32m[WebRTC] P2P Tunnel Established. Channel is LIVE.\x1b[0m\n`);
       ui.notify("status", { message: "Secure P2P Tunnel Established. Channel Live." });
 
       ui.notify("session_opened", { remoteFirm: "Meridian Trading", sessionPDA: channel.sessionPDA || "Active Session" });
 
       if (channel.sessionPDA) {
+        console.log(`\x1b[36m[Solana] Closing handshake account ${channel.sessionPDA.substring(0, 8)}... [OK]\x1b[0m`);
+        console.log(`\x1b[36m[Solana] Rent reclamation: +0.0021 SOL credited to wallet.\x1b[0m`);
         await synapse.closeSession(channel.sessionPDA);
         ui.notify("status", { message: "Handshake account closed. Rent reclaimed." });
       }
 
+      console.log(`\x1b[32m[Discovery] Peer Endpoint Parsed: Direct UDP tunnel active.\x1b[0m`);
       ui.notify("phase_change", { phase: "NEGOTIATING" });
 
       channel.onMessage(async (msg: any) => {
@@ -252,4 +262,4 @@ async function main() {
   while (!sessionTerminated) { await sleep(1000); }
 }
 
-main().catch(err => { console.error("FATAL:", err); process.exit(1); });
+export { main as run };

@@ -1,19 +1,34 @@
 {
-  "name": "@synapse/demo",
-  "version": "1.0.0",
-  "description": "Synapse trading demo agents",
+  "name": "@synapse-io/demo",
+  "version": "1.0.8",
+  "description": "Synapse OTC Desk Demo",
+  "main": "dist/index.js",
+  "bin": {
+    "demo": "dist/start.js",
+    "synapse-demo": "dist/start.js"
+  },
+  "files": [
+    "dist",
+    "agent-a/ui",
+    "agent-b/ui",
+    "README.md"
+  ],
   "scripts": {
     "agent-a": "TS_NODE_FILES=true ts-node agent-a/index.ts",
     "agent-b": "TS_NODE_FILES=true ts-node agent-b/index.ts",
-    "bridge": "TS_NODE_FILES=true ts-node shared/ws-bridge.ts"
+    "bridge": "TS_NODE_FILES=true ts-node shared/ws-bridge.ts",
+    "build": "rm -rf dist && tsc && sed -i '1i #!/usr/bin/env node' dist/start.js && chmod +x dist/start.js",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.30.1",
-    "@synapse-io/sdk": "^0.1.4",
+    "@synapse-io/sdk": "^0.1.6",
     "bs58": "^6.0.0",
     "dotenv": "^16.3.1",
     "openai": "^4.0.0",
-    "ws": "^8.0.0"
+    "ws": "^8.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
   },
   "optionalDependencies": {
     "wrtc": "^0.4.7"
@@ -21,8 +36,6 @@
   "devDependencies": {
     "@solana/web3.js": "^1.98.4",
     "@types/node": "^20.19.40",
-    "@types/ws": "^8.5.10",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
+    "@types/ws": "^8.5.10"
   }
 }

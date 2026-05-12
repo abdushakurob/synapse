@@ -12,7 +12,9 @@
     "build-sdk": "npm run build -w sdk",
     "type-check": "npx tsc --noEmit",
     "agent-a": "npm run agent-a -w demo",
-    "agent-b": "npm run agent-b -w demo"
+    "agent-b": "npm run agent-b -w demo",
+    "demo:local": "npx ts-node --transpile-only demo/start.ts",
+    "dev": "npm run dev -w web"
   },
   "dependencies": {
     "ts-node": "^10.9.2",

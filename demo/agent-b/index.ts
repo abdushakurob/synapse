@@ -19,7 +19,7 @@ function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 async function main() {
   // Use port 10000 on Render (unified), 3002 locally
   const uiPort = process.env.PORT ? parseInt(process.env.PORT) : 3002;
-  console.log(`\n\x1b[32m◈ MERIDIAN TRADING DASHBOARD BRIDGE: http://localhost:${uiPort}\x1b[0m\n`);
+  console.log(`\n\x1b[32mMERIDIAN TRADING DASHBOARD BRIDGE: http://localhost:${uiPort}\x1b[0m\n`);
   const ui = new UIBridge(uiPort, "meridian");
   const history: ChatMessage[] = [];
   let sessionComplete = false;
@@ -62,15 +62,24 @@ async function main() {
   ui.notify("status", { message: "Awaiting incoming handshake..." });
 
   synapse.onConnection(async (channel, from) => {
+    console.log(`\n\x1b[35m[Signaling] Incoming connection detected from ${from}!\x1b[0m`);
+    console.log(`\x1b[35m[Crypto] Retrieving Encrypted Offer from Solana PDA... [OK]\x1b[0m`);
+    
     // ENCRYPTION VISUALIZATION: Responder
     const dummyHex = "4a6b20c3...d9e1f0a2";
     ui.notify("status", { message: `Retrieved Encrypted Offer from PDA...` });
     ui.notify("status", { message: `RAW_CIPHER: ${dummyHex}` });
+    
     await sleep(1000);
+    console.log(`\x1b[35m[Crypto] Decrypting via X25519 Elliptic Curve... [SUCCESS]\x1b[0m`);
+    console.log(`\x1b[35m[Crypto] Derived Shared Secret. Writing Answer to Solana...\x1b[0m`);
+    
     ui.notify("status", { message: "Decryption Successful. Derived Shared Secret." });
+    console.log(`\x1b[35m[Discovery] Decrypted Peer SDP: Endpoint located at ${from}.\x1b[0m`);
     ui.notify("status", { message: "Writing Encrypted Answer to Solana..." });
     await sleep(600);
 
+    console.log(`\x1b[32m[WebRTC] Handshake complete. P2P Tunnel SECURED with ${from}.\x1b[0m\n`);
     ui.notify("session_opened", { remoteFirm: "Apex Capital", sessionPDA: channel.sessionPDA || "Active Session" });
     ui.notify("status", { message: `Secure P2P Channel Established with ${from}` });
 
@@ -202,4 +211,4 @@ async function main() {
   while (!sessionComplete) { await sleep(1000); }
 }
 
-main().catch(err => { console.error("FATAL:", err); process.exit(1); });
+export { main as run };

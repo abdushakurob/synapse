@@ -1,19 +1,37 @@
 import * as dotenv from "dotenv";
 import * as path from "path";
 
+// Load .env from current working directory (where user runs npx)
+dotenv.config();
+// Also try to load from the package's internal root as a fallback
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
-import OpenAI from "openai";
-
 const TOGETHER_API_KEY = process.env.TOGETHER_API_KEY;
-if (!TOGETHER_API_KEY) {
-  throw new Error("TOGETHER_API_KEY is not set in the environment.");
+// The default community relay. User should replace this with their hosted relay URL.
+const DEFAULT_RELAY = "https://relay.synapse-io.com/v1"; 
+const RELAY_URL = process.env.SYNAPSE_RELAY_URL || (TOGETHER_API_KEY ? "https://api.together.xyz/v1" : DEFAULT_RELAY);
+
+export class RateLimitedError extends Error {
+  constructor() {
+    super("RELAY_RATE_LIMITED");
+    this.name = "RateLimitedError";
+  }
 }
 
-const openai = new OpenAI({
-  apiKey: TOGETHER_API_KEY,
-  baseURL: "https://api.together.xyz/v1",
-});
+export function validateKey() {
+  // Always valid to start because we have a default relay
+  return true;
+}
+
+function getOpenAI() {
+  const apiKey = process.env.TOGETHER_API_KEY || "relay-mode";
+  const baseURL = process.env.TOGETHER_API_KEY ? "https://api.together.xyz/v1" : RELAY_URL;
+  
+  return new OpenAI({
+    apiKey,
+    baseURL,
+  });
+}
 
 export type Role = "user" | "assistant" | "system";
 
@@ -40,7 +58,7 @@ async function callTogetherAPI(
 
     try {
       if (onChunk) {
-        const stream = await openai.chat.completions.create({
+        const stream = await getOpenAI().chat.completions.create({
           model: MODEL,
           messages,
           temperature,
@@ -59,7 +77,7 @@ async function callTogetherAPI(
         }
         return fullContent;
       } else {
-        const response = await openai.chat.completions.create({
+        const response = await getOpenAI().chat.completions.create({
           model: MODEL,
           messages,
           temperature,
@@ -70,6 +88,12 @@ async function callTogetherAPI(
       }
     } catch (err: any) {
       if (err.name === "AbortError" || err.message === "AbortError") throw err;
+      
+      // Detection of relay rate limiting
+      if (err.status === 429 || (err.message && err.message.includes("429"))) {
+        throw new RateLimitedError();
+      }
+
       lastError = err;
       console.error(`[LLM] Attempt ${attempt}/${MAX_RETRIES} failed: ${err.message}`);
       if (attempt < MAX_RETRIES) {

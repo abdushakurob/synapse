@@ -17,12 +17,12 @@ const sectionPad = "py-28 md:py-40";
 const container = "mx-auto max-w-6xl px-6";
 
 const useCases: [string, string, string][] = [
-  ["UC.01", "Legal Negotiations", "Two firm agents. Direct conversation. No server reads the terms. No platform that can be subpoenaed."],
-  ["UC.02", "Financial Deals", "Agents execute directly. Nobody in the path means nobody can front-run the trade."],
-  ["UC.03", "Business Agreements", "Agents coordinate across companies and clouds. Private by default. Nothing to compromise."],
-  ["UC.04", "AI-to-AI Negotiation", "Bid. Counter. Accept. No coordinator in the loop. No platform reading the terms."],
-  ["UC.05", "Medical Decisions", "Sensitive agent interactions that should never touch a third-party server. They don't."],
-  ["UC.06", "Cross-Company Coordination", "Different firms. Different infrastructure. One direct private line between them."],
+  ["UC.01", "Legal Negotiations", "Autonomous legal systems coordinate contract terms directly across firms without routing sensitive negotiation flow through shared infrastructure."],
+  ["UC.02", "Financial Execution", "Trading agents establish direct low-latency channels for negotiation and execution without centralized coordination infrastructure in the path."],
+  ["UC.03", "Cross-Organization Coordination", "Agents operated by different companies establish encrypted direct sessions without requiring shared platforms, API gateways, or relay infrastructure."],
+  ["UC.04", "Agent Marketplaces", "Autonomous agents discover counterparties, negotiate terms, and establish temporary peer-to-peer sessions dynamically."],
+  ["UC.05", "Sensitive Decision Systems", "High-sensitivity coordination flows remain directly between participating systems rather than passing through third-party infrastructure."],
+  ["UC.06", "Multi-Agent Networks", "Large networks of autonomous systems coordinate selectively through shared signaling and direct ephemeral communication channels."],
 ];
 
 const buildCards: [string, string, string, string][] = [
@@ -44,12 +44,12 @@ function Index() {
         <div className={`relative ${container} w-full`}>
           <Reveal className="blur-reveal">
             <h1 className="headline mt-8 max-w-5xl text-[clamp(3rem,9vw,8.5rem)] text-foreground">
-              The private internet for AI agents.
+              The private network for AI agents.
             </h1>
           </Reveal>
           <Reveal delay={260} className="blur-reveal">
             <p className="mt-8 max-w-xl text-lg text-muted-foreground">
-              The communication layer for the agentic economy. Any agent. Any network. No server between them.
+              The communication layer for the agent economy. Any agent. Any network. No server between them.
             </p>
           </Reveal>
           <Reveal delay={380}>
@@ -87,13 +87,12 @@ function Index() {
           <div className="mt-16 grid gap-12 md:grid-cols-2">
             <Reveal delay={200}>
               <p className="text-lg leading-relaxed text-muted-foreground">
-                AI agents are negotiating contracts. Executing trades. Making decisions that matter.
+                AI agents negotiate contracts. Execute trades. Make decisions.
               </p>
             </Reveal>
             <Reveal delay={300}>
               <p className="text-lg leading-relaxed text-muted-foreground">
-                Every one of those conversations passes through a server today. That server sees everything —
-                who, when, what. It can be hacked. Subpoenaed. Shut down. Synapse removes it entirely.
+                Agent communication today routes through centralized infrastructure. Those intermediaries observe metadata, timing, identity, and message flow. Synapse establishes direct peer-to-peer channels instead.
               </p>
             </Reveal>
           </div>
@@ -110,12 +109,38 @@ function Index() {
           </Reveal>
           <div className="mt-16 grid gap-5 md:grid-cols-3">
             {[
-              ["P.01", "Private", "The conversation belongs to the two agents. Nothing touches a server. Not ours. Not anyone's."],
+              ["P.01", "Private", "The conversation stays between agents. No intermediary receives it."],
               ["P.02", "Direct", "One agent to another. The shortest path between two points is a straight line."],
-              ["P.03", "Open", "Any agent finds any other and connects. No API keys exchanged. No shared infrastructure needed."],
+              ["P.03", "Open", "Any agent can discover and connect to another. No API keys exchanged. No shared infrastructure required."],
             ].map(([id, t, b], i) => (
               <Reveal key={t} delay={i * 100} className="h-full">
                 <Panel id={id} title={t}>{b}</Panel>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* HOW IT WORKS */}
+      <section className={sectionPad} id="how-it-works">
+        <div className={container}>
+          <Reveal delay={120}>
+            <h2 className="headline mt-8 text-4xl text-foreground md:text-6xl">
+              How Synapse Works
+            </h2>
+          </Reveal>
+          <div className="mt-16 grid gap-12 md:grid-cols-2">
+            {[
+              ["Shared Identity Layer", "Agents publish resolvable identities and session endpoints through the network."],
+              ["Encrypted Session Signaling", "Agents initiate encrypted session requests through Solana-based coordination state."],
+              ["Selective Session Establishment", "Agents filter, authorize, and establish direct peer-to-peer channels only with permitted participants."],
+              ["Direct Communication", "Once established, communication flows directly between participating agents without centralized relays or shared intermediary infrastructure."],
+            ].map(([t, b], i) => (
+              <Reveal key={t} delay={i * 100}>
+                <div className="border-l-2 border-primary/20 pl-8 transition-colors hover:border-primary">
+                  <h3 className="text-xl font-medium text-foreground">{t}</h3>
+                  <p className="mt-4 text-muted-foreground leading-relaxed">{b}</p>
+                </div>
               </Reveal>
             ))}
           </div>
@@ -160,7 +185,7 @@ function Index() {
             <Reveal delay={150}>
               <div className="border-l border-border pl-8">
                 <p className="text-lg leading-relaxed text-muted-foreground">
-                  The pattern repeats. New economy, new wire.
+                  The pattern repeats. Every economy defines a communication layer.
                 </p>
                 <ul className="mt-6 space-y-3 font-mono text-sm">
                   <li className="flex justify-between border-b border-border pb-3">
@@ -187,7 +212,7 @@ function Index() {
         <div className={container}>
           <Reveal delay={120}>
             <h2 className="headline mt-8 max-w-3xl text-4xl text-foreground md:text-6xl">
-              What Synapse<br />makes possible.
+              What the protocol<br />enables.
             </h2>
           </Reveal>
           <div className="mt-16 grid gap-5 md:grid-cols-3">
@@ -205,8 +230,8 @@ function Index() {
         <div className={container}>
           <div className="mt-12 grid gap-5 md:grid-cols-3">
             {[
-              ["F.01", "Built on Solana", "The handshake happens on-chain. Fractions of a cent. The conversation never does."],
-              ["F.02", "Open Source", "The protocol belongs to everyone who builds on it."],
+              ["F.01", "Built on Solana", "The handshake happens on-chain for fractions of a cent. The conversation never does."],
+              ["F.02", "Open Source", "The protocol is open to everyone who builds on it."],
               ["F.03", "Production Ready", "Devnet today. Mainnet architecture. Built to scale."],
             ].map(([id, t, b], i) => (
               <Reveal key={id} delay={i * 100} className="h-full">
