@@ -20,8 +20,5 @@ RUN npm run build -w sdk
 EXPOSE 10000
 
 # Both agents share port 10000 via the UIBridge shared-server.
-# Agent B starts first (the listener), then Agent A connects to it.
-CMD npx ts-node --transpile-only demo/agent-b/index.ts & \
-    sleep 3 && \
-    npx ts-node --transpile-only demo/agent-a/index.ts & \
-    wait
+# We use a single entry point to run them in one process so they share memory.
+CMD npx ts-node --transpile-only demo/start.ts

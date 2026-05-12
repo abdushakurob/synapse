@@ -43,7 +43,7 @@ async function main() {
     ui.notify("execution_complete", { price: 0.463, quantity: acquiredTotal });
     ui.notify("status", { message: "Strategy Complete. Desk Closed." });
     await sleep(2000);
-    process.exit(0);
+    // process.exit(0); - Removed to keep shared process alive
   }
 
   const responderAlias = process.env.RESPONDER_ALIAS || "meridian-trading-dev-stable";
