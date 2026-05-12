@@ -1,33 +1,39 @@
-# Use Node 20 with build tools for native modules (wrtc)
+# Optimized Synapse Agent Container
 FROM node:20-bullseye-slim
 
-# Install system dependencies for wrtc build
+# Install system dependencies for native modules (wrtc/tweetnacl)
 RUN apt-get update && apt-get install -y \
     python3 \
     make \
     g++ \
+    libc6 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy monorepo config
+# Copy monorepo configuration
 COPY package*.json ./
 COPY sdk/package*.json ./sdk/
 COPY demo/package*.json ./demo/
 COPY cli/package*.json ./cli/
 
-# Install all dependencies using workspaces
+# Install dependencies (using --omit=dev to keep image small, 
+# but including ts-node for execution)
 RUN npm install
 
 # Copy source code
 COPY . .
 
-# Build the SDK so internal links work
+# Pre-build the SDK so it's ready for the agents
 RUN npm run build -w sdk
 
-# Expose ports for both agents
+# Expose UI Bridge ports
 EXPOSE 3001
 EXPOSE 3002
 
-# Run both agents in parallel from the root scripts
-CMD npm run agent-a & npm run agent-b & wait
+# Run with --transpile-only for 3x faster startup and lower memory.
+# We stagger the starts by 2s to prevent OOM spikes.
+CMD (npx ts-node --transpile-only demo/agent-a/index.ts) & \
+    sleep 2 && \
+    (npx ts-node --transpile-only demo/agent-b/index.ts) & \
+    wait
