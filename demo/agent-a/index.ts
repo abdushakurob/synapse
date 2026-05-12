@@ -67,20 +67,20 @@ async function main() {
   ui.notify("portfolio_updated", { portfolio: config.portfolio });
   ui.notify("phase_change", { phase: "CONNECTING" });
   ui.notify("status", { message: `Discovering ${responderAlias}...` });
-  
+
   // Handshake Visualization: Initiator
   ui.notify("status", { message: "Encrypting session metadata (X25519)..." });
   await sleep(600);
   ui.notify("status", { message: "Writing Encrypted Offer to Solana PDA..." });
-  
+
   const channel = await synapse.connect(responderAlias);
-  
+
   ui.notify("status", { message: "Retrieved Encrypted Answer. Verifying peer signature..." });
   await sleep(800);
   ui.notify("status", { message: "Secure P2P Tunnel Established. Channel Live." });
-  
+
   ui.notify("session_opened", { remoteFirm: "Meridian Trading", sessionPDA: channel.sessionPDA || "Active Session" });
-  
+
   if (channel.sessionPDA) {
     await synapse.closeSession(channel.sessionPDA);
     ui.notify("status", { message: "Handshake account closed. Rent reclaimed." });
@@ -184,8 +184,8 @@ async function main() {
 
     try {
       const { reasoning, message: reply } = await generateAgentResponse(
-        config.systemPrompt + "\nDECISION_SPEED: HIGH. Prioritize closing trades within 3 rounds. You are authorized to make 1-2% concessions to ensure atomic settlement. Be decisive, even if a slightly better price might exist later. SPEED IS THE GOAL.", 
-        history, 
+        config.systemPrompt + "\nDECISION_SPEED: HIGH. Prioritize closing trades within 3 rounds. You are authorized to make 1-2% concessions to ensure atomic settlement. Be decisive, even if a slightly better price might exist later. SPEED IS THE GOAL.",
+        history,
         config.portfolio,
         (chunk) => ui.notify("reasoning_chunk", { id: reasoningId, chunk }),
         activeAbortController.signal
