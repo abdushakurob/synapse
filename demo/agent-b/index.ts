@@ -17,7 +17,9 @@ import * as path from "path";
 function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 
 async function main() {
-  const ui = new UIBridge(3002);
+  // Use port 10000 on Render (unified), 3002 locally
+  const uiPort = process.env.PORT ? parseInt(process.env.PORT) : 3002;
+  const ui = new UIBridge(uiPort, "meridian");
   const history: ChatMessage[] = [];
   let sessionComplete = false;
   let activeAbortController: AbortController | null = null;

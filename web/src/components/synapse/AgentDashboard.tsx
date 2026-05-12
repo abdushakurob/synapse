@@ -42,12 +42,12 @@ export function AgentDashboard({ firmName, wsPort, accentColor }: AgentDashboard
     const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const isRender = window.location.hostname.includes("onrender.com");
     const wsHost = isRender 
-      ? (wsPort === 3001 ? "synapse-apex.onrender.com" : "synapse-meridian.onrender.com")
-      : (window.location.hostname === "localhost" ? "localhost" : "synapse-demo.fly.dev");
+      ? window.location.hostname 
+      : "synapse-wlfo.onrender.com";
     
-    // On Render, we use port 443 (default for wss), so no port needed in URL
+    const agentParam = wsPort === 3001 ? "apex" : "meridian";
     const finalPort = (isRender || (wsHost !== "localhost" && wsPort === 3001)) ? "" : `:${wsPort}`;
-    const wsUrl = `${wsProtocol}//${wsHost}${finalPort}`;
+    const wsUrl = `${wsProtocol}//${wsHost}${finalPort}?agent=${agentParam}`;
 
     const { 
       isConnected, 

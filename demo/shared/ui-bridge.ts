@@ -9,42 +9,67 @@ export class UIBridge {
   private state: Record<string, any> = {};
   private logBuffer: any[] = [];
 
-  constructor(port: number) {
-    this.wss = new WebSocketServer({ port });
+  private static sharedServers: Map<number, WebSocketServer> = new Map();
+  private agentId: string;
 
-    // Handle plain HTTP GET for health checks (Fly.io/Railway)
-    (this.wss as any)._server.on("request", (req: any, res: any) => {
-      if (req.method === "GET") {
-        res.writeHead(200);
-        res.end("OK");
-      }
-    });
-
-    this.wss.on("connection", (ws) => {
-      this.clients.add(ws);
+  constructor(port: number, agentId: string = "apex") {
+    this.agentId = agentId;
+    
+    // Reuse server if already created for this port (Render/Single-port support)
+    if (!UIBridge.sharedServers.has(port)) {
+      UIBridge.sharedServers.set(port, new WebSocketServer({ port }));
       
-      // Send buffered state and logs to new client
-      for (const [event, data] of Object.entries(this.state)) {
-        ws.send(JSON.stringify({ event, ...data, timestamp: Date.now() }));
-      }
-      for (const log of this.logBuffer) {
-        ws.send(JSON.stringify(log));
-      }
-
-      ws.on("message", (data) => {
-        try {
-          const msg = JSON.parse(data.toString());
-          for (const handler of this.messageHandlers) {
-            handler(msg);
+      const server = UIBridge.sharedServers.get(port)!;
+      
+      // Handle plain HTTP GET for health checks
+      (server as any)._server.on("request", (req: any, res: any) => {
+        if (req.method === "GET" && req.url?.startsWith("/")) {
+          if (!res.headersSent) {
+            res.writeHead(200);
+            res.end("OK");
           }
-        } catch (err) {
-          console.error(`[UI Bridge] Failed to parse incoming message`, err);
         }
       });
+    }
 
-      ws.on("close", () => this.clients.delete(ws));
+    this.wss = UIBridge.sharedServers.get(port)!;
+
+    this.wss.on("connection", (ws, req) => {
+      const url = new URL(req.url || "/", `http://${req.headers.host}`);
+      const wsAgentId = url.searchParams.get("agent") || "apex";
+      
+      // Only add to clients if it matches this bridge's agentId
+      if (wsAgentId === this.agentId) {
+        this.clients.add(ws);
+        console.log(`[UI Bridge] Agent ${wsAgentId} dashboard connected`);
+        
+        // Send buffered state and logs to new client
+        for (const [event, data] of Object.entries(this.state)) {
+          ws.send(JSON.stringify({ event, ...data, timestamp: Date.now() }));
+        }
+        for (const log of this.logBuffer) {
+          ws.send(JSON.stringify(log));
+        }
+
+        ws.on("message", (data) => {
+          try {
+            const msg = JSON.parse(data.toString());
+            for (const handler of this.messageHandlers) {
+              handler(msg);
+            }
+          } catch (err) {
+            console.error(`[UI Bridge] Failed to parse incoming message`, err);
+          }
+        });
+
+        ws.on("close", () => {
+          this.clients.delete(ws);
+          console.log(`[UI Bridge] Agent ${wsAgentId} dashboard disconnected`);
+        });
+      }
     });
-    console.log(`[UI Bridge] Live on port ${port}`);
+
+    console.log(`[UI Bridge] Agent ${agentId} listening on shared port ${port}`);
   }
 
   onMessage(handler: (msg: any) => void) {

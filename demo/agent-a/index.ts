@@ -22,7 +22,9 @@ const TOTAL_GOAL = 500000;
 function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 
 async function main() {
-  const ui = new UIBridge(3001);
+  // Use port 10000 on Render (unified), 3001 locally
+  const uiPort = process.env.PORT ? parseInt(process.env.PORT) : 3001;
+  const ui = new UIBridge(uiPort, "apex");
   const history: ChatMessage[] = [];
   let acquiredTotal = 0;
   let sessionTerminated = false;
