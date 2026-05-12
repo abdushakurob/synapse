@@ -19,6 +19,7 @@ function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 async function main() {
   // Use port 10000 on Render (unified), 3002 locally
   const uiPort = process.env.PORT ? parseInt(process.env.PORT) : 3002;
+  console.log(`\n\x1b[32m◈ MERIDIAN TRADING DASHBOARD BRIDGE: http://localhost:${uiPort}\x1b[0m\n`);
   const ui = new UIBridge(uiPort, "meridian");
   const history: ChatMessage[] = [];
   let sessionComplete = false;

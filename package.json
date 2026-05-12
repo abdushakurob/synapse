@@ -16,7 +16,6 @@
   },
   "dependencies": {
     "ts-node": "^10.9.2",
-    "typescript": "^5.0.0",
-    "wrtc": "^0.4.7"
+    "typescript": "^5.0.0"
   }
 }

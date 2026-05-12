@@ -24,6 +24,7 @@ function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 async function main() {
   // Use port 10000 on Render (unified), 3001 locally
   const uiPort = process.env.PORT ? parseInt(process.env.PORT) : 3001;
+  console.log(`\n\x1b[36m◈ APEX CAPITAL DASHBOARD BRIDGE: http://localhost:${uiPort}\x1b[0m\n`);
   const ui = new UIBridge(uiPort, "apex");
   const history: ChatMessage[] = [];
   let acquiredTotal = 0;
