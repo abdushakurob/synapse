@@ -1,4 +1,4 @@
-# Multi-Role Synapse Agent Container
+# Synapse Parallel Agent Container for Render
 FROM node:20-bullseye-slim
 
 # Install system dependencies
@@ -25,10 +25,12 @@ COPY . .
 # Build the SDK
 RUN npm run build -w sdk
 
-# The AGENT_TYPE env var (set in render.yaml) decides which agent to start.
-# This allows one image to serve multiple roles.
-CMD if [ "$AGENT_TYPE" = "agent-a" ]; then \
-      npx ts-node --transpile-only demo/agent-a/index.ts; \
-    else \
-      npx ts-node --transpile-only demo/agent-b/index.ts; \
-    fi
+# Expose Render's default port
+EXPOSE 10000
+
+# Run both agents in parallel on the SAME shared port.
+# The UIBridge handles the multiplexing via the ?agent= query param.
+CMD (npx ts-node --transpile-only demo/agent-a/index.ts) & \
+    sleep 5 && \
+    (npx ts-node --transpile-only demo/agent-b/index.ts) & \
+    wait
