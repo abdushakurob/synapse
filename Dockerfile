@@ -1,27 +1,27 @@
-# Synapse Pure-JS P2P Container
 FROM node:20-bullseye-slim
+
+RUN apt-get update && apt-get install -y \
+    python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy monorepo config
 COPY package*.json ./
 COPY sdk/package*.json ./sdk/
 COPY demo/package*.json ./demo/
 COPY cli/package*.json ./cli/
 
-# Install dependencies (Fast! No native compilation)
-RUN npm install --legacy-peer-deps
+RUN npm install
 
-# Copy source code
 COPY . .
 
-# Build the SDK
 RUN npm run build -w sdk
 
 EXPOSE 10000
 
-# Run both agents in parallel on the shared boardroom port
-CMD (npx ts-node --transpile-only demo/agent-a/index.ts) & \
-    sleep 5 && \
-    (npx ts-node --transpile-only demo/agent-b/index.ts) & \
+# Both agents share port 10000 via the UIBridge shared-server.
+# Agent B starts first (the listener), then Agent A connects to it.
+CMD npx ts-node --transpile-only demo/agent-b/index.ts & \
+    sleep 3 && \
+    npx ts-node --transpile-only demo/agent-a/index.ts & \
     wait

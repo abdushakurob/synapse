@@ -39,15 +39,12 @@ interface AgentDashboardProps {
 }
 
 export function AgentDashboard({ firmName, wsPort, accentColor }: AgentDashboardProps) {
-    const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const isRender = window.location.hostname.includes("onrender.com");
-    const wsHost = isRender 
-      ? window.location.hostname 
-      : "synapse-wlfo.onrender.com";
-    
+    const isLocal = window.location.hostname === "localhost";
     const agentParam = wsPort === 3001 ? "apex" : "meridian";
-    const finalPort = (isRender || (wsHost !== "localhost" && wsPort === 3001)) ? "" : `:${wsPort}`;
-    const wsUrl = `${wsProtocol}//${wsHost}${finalPort}?agent=${agentParam}`;
+    
+    const wsUrl = isLocal
+      ? `ws://localhost:${wsPort}`
+      : `wss://${window.location.hostname}?agent=${agentParam}`;
 
     const { 
       isConnected, 

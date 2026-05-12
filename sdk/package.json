@@ -31,8 +31,10 @@
     "simple-peer": "^9.11.1",
     "tweetnacl": "^1.0.3",
     "tweetnacl-util": "^0.15.1",
-    "ws": "^8.0.0",
-    "werift": "^0.18.0"
+    "ws": "^8.0.0"
+  },
+  "optionalDependencies": {
+    "wrtc": "^0.4.7"
   },
   "devDependencies": {
     "@types/ed2curve": "^0.2.4",

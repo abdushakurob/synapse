@@ -7,16 +7,12 @@ import Peer from "simple-peer";
  */
 function getWrtc() {
   try {
-    // We switch to 'werift' which is a pure TS/WASM implementation.
-    // No native binaries required.
-    const werift = require("werift");
-    return werift.nonStandard.RTCPeerConnection 
-      ? werift.nonStandard 
-      : werift;
+    return require("wrtc");
   } catch (e) {
     throw new Error(
-      "[Synapse SDK] The 'werift' dependency is missing. " +
-      "Run 'npm install werift' to enable pure-JS P2P communication."
+      "[Synapse SDK] The 'wrtc' dependency is missing. " +
+      "This is required for P2P connections in Node.js environments. " +
+      "Run 'npm install wrtc' to enable P2P communication."
     );
   }
 }
