@@ -1,0 +1,28 @@
+services:
+  # Agent A - Apex Capital
+  - type: web
+    name: synapse-apex
+    env: docker
+    plan: free
+    region: ohio
+    envVars:
+      - key: TOGETHER_API_KEY
+        sync: false
+      - key: AGENT_TYPE
+        value: "agent-a"
+      - key: PORT
+        value: "3001"
+
+  # Agent B - Meridian Trading
+  - type: web
+    name: synapse-meridian
+    env: docker
+    plan: free
+    region: ohio
+    envVars:
+      - key: TOGETHER_API_KEY
+        sync: false
+      - key: AGENT_TYPE
+        value: "agent-b"
+      - key: PORT
+        value: "3002"

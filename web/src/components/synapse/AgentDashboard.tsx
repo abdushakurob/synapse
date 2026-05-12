@@ -40,9 +40,13 @@ interface AgentDashboardProps {
 
 export function AgentDashboard({ firmName, wsPort, accentColor }: AgentDashboardProps) {
     const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsHost = window.location.hostname === "localhost" ? "localhost" : "synapse-demo.fly.dev";
-    // Fly.io routes port 3001 to 80/443, but 3002 stays on 3002
-    const finalPort = (wsHost !== "localhost" && wsPort === 3001) ? "" : `:${wsPort}`;
+    const isRender = window.location.hostname.includes("onrender.com");
+    const wsHost = isRender 
+      ? (wsPort === 3001 ? "synapse-apex.onrender.com" : "synapse-meridian.onrender.com")
+      : (window.location.hostname === "localhost" ? "localhost" : "synapse-demo.fly.dev");
+    
+    // On Render, we use port 443 (default for wss), so no port needed in URL
+    const finalPort = (isRender || (wsHost !== "localhost" && wsPort === 3001)) ? "" : `:${wsPort}`;
     const wsUrl = `${wsProtocol}//${wsHost}${finalPort}`;
 
     const { 
