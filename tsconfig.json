@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "composite": true,
+    "declaration": true,
+    "declarationMap": true
+  },
+  "files": [],
+  "references": [
+    { "path": "sdk" },
+    { "path": "demo" },
+    { "path": "cli" },
+    { "path": "web" }
+  ]
+}
