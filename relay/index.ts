@@ -9,10 +9,20 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 4000;
 
-const openai = new OpenAI({
-  apiKey: process.env.TOGETHER_API_KEY,
-  baseURL: "https://api.together.xyz/v1",
-});
+let _openai: OpenAI | null = null;
+function getOpenAI() {
+  if (!_openai) {
+    const apiKey = process.env.TOGETHER_API_KEY;
+    if (!apiKey) {
+      throw new Error("TOGETHER_API_KEY is not set in the relay environment.");
+    }
+    _openai = new OpenAI({
+      apiKey,
+      baseURL: "https://api.together.xyz/v1",
+    });
+  }
+  return _openai;
+}
 
 app.use(cors());
 app.use(express.json());
@@ -30,7 +40,7 @@ app.post("/v1/chat/completions", async (req: express.Request, res: express.Respo
     const { messages, model, temperature, max_tokens, stream } = req.body;
 
     if (stream) {
-      const completion = await openai.chat.completions.create({
+      const completion = await getOpenAI().chat.completions.create({
         messages,
         model: model || "meta-llama/Llama-3.3-70B-Instruct-Turbo",
         temperature: temperature || 0.7,
@@ -48,7 +58,7 @@ app.post("/v1/chat/completions", async (req: express.Request, res: express.Respo
       res.write("data: [DONE]\n\n");
       res.end();
     } else {
-      const response = await openai.chat.completions.create({
+      const response = await getOpenAI().chat.completions.create({
         messages,
         model: model || "meta-llama/Llama-3.3-70B-Instruct-Turbo",
         temperature: temperature || 0.7,
