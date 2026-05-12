@@ -65,182 +65,188 @@ async function main() {
   }
 
   ui.notify("portfolio_updated", { portfolio: config.portfolio });
-  ui.notify("phase_change", { phase: "CONNECTING" });
-  ui.notify("status", { message: `Discovering ${responderAlias}...` });
+  ui.notify("status", { message: "READY. Waiting for boardroom initialization..." });
 
-  // Handshake Visualization: Initiator
-  ui.notify("status", { message: "Encrypting session metadata (X25519)..." });
-  await sleep(600);
-  ui.notify("status", { message: "Writing Encrypted Offer to Solana PDA..." });
+  ui.onMessage(async (msg) => {
+    if (msg.type === "start") {
+      ui.notify("phase_change", { phase: "CONNECTING" });
+      ui.notify("status", { message: `Discovering ${responderAlias}...` });
 
-  const channel = await synapse.connect(responderAlias);
+      // Handshake Visualization: Initiator
+      ui.notify("status", { message: "Encrypting session metadata (X25519)..." });
+      await sleep(600);
+      ui.notify("status", { message: "Writing Encrypted Offer to Solana PDA..." });
 
-  ui.notify("status", { message: "Retrieved Encrypted Answer. Verifying peer signature..." });
-  await sleep(800);
-  ui.notify("status", { message: "Secure P2P Tunnel Established. Channel Live." });
+      const channel = await synapse.connect(responderAlias);
 
-  ui.notify("session_opened", { remoteFirm: "Meridian Trading", sessionPDA: channel.sessionPDA || "Active Session" });
+      ui.notify("status", { message: "Retrieved Encrypted Answer. Verifying peer signature..." });
+      await sleep(800);
+      ui.notify("status", { message: "Secure P2P Tunnel Established. Channel Live." });
 
-  if (channel.sessionPDA) {
-    await synapse.closeSession(channel.sessionPDA);
-    ui.notify("status", { message: "Handshake account closed. Rent reclaimed." });
-  }
+      ui.notify("session_opened", { remoteFirm: "Meridian Trading", sessionPDA: channel.sessionPDA || "Active Session" });
 
-  ui.notify("phase_change", { phase: "NEGOTIATING" });
+      if (channel.sessionPDA) {
+        await synapse.closeSession(channel.sessionPDA);
+        ui.notify("status", { message: "Handshake account closed. Rent reclaimed." });
+      }
 
-  channel.onMessage(async (msg: any) => {
-    // COLLISION DETECTION
-    if (activeAbortController) {
-      activeAbortController.abort();
-      activeAbortController = null;
-      ui.notify("status", { message: "Peer interrupted. Recalibrating strategy..." });
-    }
+      ui.notify("phase_change", { phase: "NEGOTIATING" });
 
-    const message = msg as Message;
-    ui.notify("message_received", { message, timestamp: Date.now() });
-    history.push({ role: "user", content: JSON.stringify(message) });
+      channel.onMessage(async (msg: any) => {
+        // COLLISION DETECTION
+        if (activeAbortController) {
+          activeAbortController.abort();
+          activeAbortController = null;
+          ui.notify("status", { message: "Peer interrupted. Recalibrating strategy..." });
+        }
 
-    // Handle Status / Acks
-    if (message.type === "status") {
-      const statusMsg = String(message.message || "").trim().toUpperCase();
-      if (statusMsg === "SETTLEMENT_ACK") {
-        ui.notify("status", { message: "Peer confirmed settlement. Moving to next block." });
-        if (acquiredTotal < TOTAL_GOAL) {
+        const message = msg as Message;
+        ui.notify("message_received", { message, timestamp: Date.now() });
+        history.push({ role: "user", content: JSON.stringify(message) });
+
+        // Handle Status / Acks
+        if (message.type === "status") {
+          const statusMsg = String(message.message || "").trim().toUpperCase();
+          if (statusMsg === "SETTLEMENT_ACK") {
+            ui.notify("status", { message: "Peer confirmed settlement. Moving to next block." });
+            if (acquiredTotal < TOTAL_GOAL) {
+              await sleep(2000);
+              const remaining = TOTAL_GOAL - acquiredTotal;
+              const nextSize = Math.min(remaining, Math.floor(Math.random() * 50000) + 50000);
+              const nextRfq = { type: "rfq", asset: "SYN", quantity: nextSize, side: "buy" };
+              ui.notify("message_sent", { message: nextRfq });
+              channel.send(nextRfq);
+              history.push({ role: "assistant", content: JSON.stringify(nextRfq) });
+            }
+            return;
+          } else {
+            ui.notify("status", { message: `Peer Status: ${message.message}` });
+          }
+        }
+
+        if ((message as any).price) {
+          ui.notify("price_update", { price: (message as any).price, timestamp: Date.now() });
+        }
+
+        // Handle Rejection / Termination (Receiving)
+        if (message.type === "reject") {
+          if (message.reason?.includes("TERMINATE") || message.reason?.includes("GOAL")) {
+            ui.notify("status", { message: "Strategic exit confirmed. Terminating session..." });
+            await triggerFinalReport();
+            return;
+          } else {
+            const brief = await generateInternalAnalysis(
+              "Tactical Intelligence",
+              `Translate this rejection into a brief 1-sentence boardroom update: ${message.reason || "better deal please"}`,
+              { history: history.slice(-5) }
+            );
+            ui.notify("status", { message: brief });
+          }
+        }
+
+        // Handle Execution (Receiving)
+        if (message.type === "execution" || message.type === "execute" || message.type === "accept") {
+          const side = (message as any).side || "BUY";
+          const total = (message as any).quantity * (message as any).price;
+          if (side === "BUY") {
+            config.portfolio.USDC -= total;
+            config.portfolio.SYN += (message as any).quantity;
+            acquiredTotal += (message as any).quantity;
+          } else {
+            config.portfolio.USDC += total;
+            config.portfolio.SYN -= (message as any).quantity;
+          }
+          ui.notify("trade_executed", { trade: { price: (message as any).price, quantity: (message as any).quantity, side } });
+          ui.notify("portfolio_updated", { portfolio: config.portfolio });
+          ui.notify("status", { message: `Settlement Complete. (${acquiredTotal}/${TOTAL_GOAL} acquired)` });
+          channel.send({ type: "status", message: "SETTLEMENT_ACK" });
+
+          if (acquiredTotal >= TOTAL_GOAL) {
+            ui.notify("status", { message: "Accumulation target met. Initiating final exit..." });
+            await sleep(2000);
+            channel.send({ type: "reject", reason: "GOAL_ACHIEVED_TERMINATE" });
+            await triggerFinalReport();
+          }
+          return;
+        }
+
+        // TACTICAL MANEUVER
+        const shouldDump = Math.random() > 0.94 && config.portfolio.SYN > 50000;
+        if (shouldDump) {
+          ui.notify("status", { message: "Executing tactical market pressure..." });
+          const manipulationMsg = { type: "counter", asset: "SYN", quantity: 10000, price: (message as any).price * 0.98, side: "sell" };
+          ui.notify("message_sent", { message: manipulationMsg, timestamp: Date.now() });
+          channel.send(manipulationMsg);
+          history.push({ role: "assistant", content: JSON.stringify(manipulationMsg) });
+          return;
+        }
+
+        // GENERATE RESPONSE
+        activeAbortController = new AbortController();
+        const reasoningId = Math.random().toString(36).substring(7);
+        await sleep(Math.floor(Math.random() * 1500) + 500);
+
+        try {
+          const { reasoning, message: reply } = await generateAgentResponse(
+            config.systemPrompt + "\nDECISION_SPEED: HIGH. Prioritize closing trades within 3 rounds. You are authorized to make 1-2% concessions to ensure atomic settlement. Be decisive, even if a slightly better price might exist later. SPEED IS THE GOAL.",
+            history,
+            config.portfolio,
+            (chunk) => ui.notify("reasoning_chunk", { id: reasoningId, chunk }),
+            activeAbortController.signal
+          );
+          activeAbortController = null;
+          if (reply.type === "status" && reply.message === "ABORTED") return;
+
+          ui.notify("reasoning", { id: reasoningId, text: reasoning });
           await sleep(2000);
-          const remaining = TOTAL_GOAL - acquiredTotal;
-          const nextSize = Math.min(remaining, Math.floor(Math.random() * 50000) + 50000);
-          const nextRfq = { type: "rfq", asset: "SYN", quantity: nextSize, side: "buy" };
-          ui.notify("message_sent", { message: nextRfq });
-          channel.send(nextRfq);
-          history.push({ role: "assistant", content: JSON.stringify(nextRfq) });
+          ui.notify("message_sent", { message: reply, timestamp: Date.now() });
+          if (reply.price) ui.notify("price_update", { price: reply.price, timestamp: Date.now() });
+
+          channel.send(reply);
+          history.push({ role: "assistant", content: JSON.stringify(reply) });
+
+          // SELF-TERMINATION (Sending)
+          if (reply.type === "reject" && (reply.reason?.includes("TERMINATE") || reply.reason?.includes("GOAL"))) {
+            ui.notify("status", { message: "Strategy complete. Initiating strategic exit..." });
+            await triggerFinalReport();
+            return;
+          }
+
+          // Handle Execution (Sending)
+          if (reply.type === "execution" || reply.type === "execute" || reply.type === "accept") {
+            const side = (reply as any).side || "BUY";
+            const total = reply.quantity * reply.price;
+            if (side === "BUY") {
+              config.portfolio.USDC -= total;
+              config.portfolio.SYN += reply.quantity;
+              acquiredTotal += reply.quantity;
+            } else {
+              config.portfolio.USDC += total;
+              config.portfolio.SYN -= reply.quantity;
+            }
+            ui.notify("trade_executed", { trade: { price: reply.price, quantity: reply.quantity, side } });
+            ui.notify("portfolio_updated", { portfolio: config.portfolio });
+            ui.notify("status", { message: `Settled ${reply.quantity} units. Finalizing block...` });
+
+            if (acquiredTotal >= TOTAL_GOAL) {
+              ui.notify("status", { message: "Accumulation target met. Initiating final exit..." });
+              await sleep(2000);
+              channel.send({ type: "reject", reason: "GOAL_ACHIEVED_TERMINATE" });
+              await triggerFinalReport();
+            }
+          }
+        } catch (err: any) {
+          if (err.message !== "AbortError") throw err;
         }
-        return;
-      } else {
-        ui.notify("status", { message: `Peer Status: ${message.message}` });
-      }
-    }
+      });
 
-    if ((message as any).price) {
-      ui.notify("price_update", { price: (message as any).price, timestamp: Date.now() });
-    }
-
-    // Handle Rejection / Termination (Receiving)
-    if (message.type === "reject") {
-      if (message.reason?.includes("TERMINATE") || message.reason?.includes("GOAL")) {
-        ui.notify("status", { message: "Strategic exit confirmed. Terminating session..." });
-        await triggerFinalReport();
-        return;
-      } else {
-        const brief = await generateInternalAnalysis(
-          "Tactical Intelligence",
-          `Translate this rejection into a brief 1-sentence boardroom update: ${message.reason || "better deal please"}`,
-          { history: history.slice(-5) }
-        );
-        ui.notify("status", { message: brief });
-      }
-    }
-
-    // Handle Execution (Receiving)
-    if (message.type === "execution" || message.type === "execute" || message.type === "accept") {
-      const side = (message as any).side || "BUY";
-      const total = (message as any).quantity * (message as any).price;
-      if (side === "BUY") {
-        config.portfolio.USDC -= total;
-        config.portfolio.SYN += (message as any).quantity;
-        acquiredTotal += (message as any).quantity;
-      } else {
-        config.portfolio.USDC += total;
-        config.portfolio.SYN -= (message as any).quantity;
-      }
-      ui.notify("trade_executed", { trade: { price: (message as any).price, quantity: (message as any).quantity, side } });
-      ui.notify("portfolio_updated", { portfolio: config.portfolio });
-      ui.notify("status", { message: `Settlement Complete. (${acquiredTotal}/${TOTAL_GOAL} acquired)` });
-      channel.send({ type: "status", message: "SETTLEMENT_ACK" });
-
-      if (acquiredTotal >= TOTAL_GOAL) {
-        ui.notify("status", { message: "Accumulation target met. Initiating final exit..." });
-        await sleep(2000);
-        channel.send({ type: "reject", reason: "GOAL_ACHIEVED_TERMINATE" });
-        await triggerFinalReport();
-      }
-      return;
-    }
-
-    // TACTICAL MANEUVER
-    const shouldDump = Math.random() > 0.94 && config.portfolio.SYN > 50000;
-    if (shouldDump) {
-      ui.notify("status", { message: "Executing tactical market pressure..." });
-      const manipulationMsg = { type: "counter", asset: "SYN", quantity: 10000, price: (message as any).price * 0.98, side: "sell" };
-      ui.notify("message_sent", { message: manipulationMsg, timestamp: Date.now() });
-      channel.send(manipulationMsg);
-      history.push({ role: "assistant", content: JSON.stringify(manipulationMsg) });
-      return;
-    }
-
-    // GENERATE RESPONSE
-    activeAbortController = new AbortController();
-    const reasoningId = Math.random().toString(36).substring(7);
-    await sleep(Math.floor(Math.random() * 1500) + 500);
-
-    try {
-      const { reasoning, message: reply } = await generateAgentResponse(
-        config.systemPrompt + "\nDECISION_SPEED: HIGH. Prioritize closing trades within 3 rounds. You are authorized to make 1-2% concessions to ensure atomic settlement. Be decisive, even if a slightly better price might exist later. SPEED IS THE GOAL.",
-        history,
-        config.portfolio,
-        (chunk) => ui.notify("reasoning_chunk", { id: reasoningId, chunk }),
-        activeAbortController.signal
-      );
-      activeAbortController = null;
-      if (reply.type === "status" && reply.message === "ABORTED") return;
-
-      ui.notify("reasoning", { id: reasoningId, text: reasoning });
-      await sleep(2000);
-      ui.notify("message_sent", { message: reply, timestamp: Date.now() });
-      if (reply.price) ui.notify("price_update", { price: reply.price, timestamp: Date.now() });
-
-      channel.send(reply);
-      history.push({ role: "assistant", content: JSON.stringify(reply) });
-
-      // SELF-TERMINATION (Sending)
-      if (reply.type === "reject" && (reply.reason?.includes("TERMINATE") || reply.reason?.includes("GOAL"))) {
-        ui.notify("status", { message: "Strategy complete. Initiating strategic exit..." });
-        await triggerFinalReport();
-        return;
-      }
-
-      // Handle Execution (Sending)
-      if (reply.type === "execution" || reply.type === "execute" || reply.type === "accept") {
-        const side = (reply as any).side || "BUY";
-        const total = reply.quantity * reply.price;
-        if (side === "BUY") {
-          config.portfolio.USDC -= total;
-          config.portfolio.SYN += reply.quantity;
-          acquiredTotal += reply.quantity;
-        } else {
-          config.portfolio.USDC += total;
-          config.portfolio.SYN -= reply.quantity;
-        }
-        ui.notify("trade_executed", { trade: { price: reply.price, quantity: reply.quantity, side } });
-        ui.notify("portfolio_updated", { portfolio: config.portfolio });
-        ui.notify("status", { message: `Settled ${reply.quantity} units. Finalizing block...` });
-
-        if (acquiredTotal >= TOTAL_GOAL) {
-          ui.notify("status", { message: "Accumulation target met. Initiating final exit..." });
-          await sleep(2000);
-          channel.send({ type: "reject", reason: "GOAL_ACHIEVED_TERMINATE" });
-          await triggerFinalReport();
-        }
-      }
-    } catch (err: any) {
-      if (err.message !== "AbortError") throw err;
+      // Initial RFQ
+      const initialRfq = { type: "rfq", asset: "SYN", quantity: 50000, side: "buy" };
+      ui.notify("message_sent", { message: initialRfq });
+      channel.send(initialRfq);
+      history.push({ role: "assistant", content: JSON.stringify(initialRfq) });
     }
   });
-
-  // Initial RFQ
-  const initialRfq = { type: "rfq", asset: "SYN", quantity: 50000, side: "buy" };
-  ui.notify("message_sent", { message: initialRfq });
-  channel.send(initialRfq);
-  history.push({ role: "assistant", content: JSON.stringify(initialRfq) });
 
   while (!sessionTerminated) { await sleep(1000); }
 }

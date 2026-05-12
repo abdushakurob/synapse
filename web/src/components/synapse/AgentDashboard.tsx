@@ -39,11 +39,11 @@ interface AgentDashboardProps {
 }
 
 export function AgentDashboard({ firmName, wsPort, accentColor }: AgentDashboardProps) {
-    const isLocal = window.location.hostname === "localhost";
+    const isLocal = window.location.hostname === "localhost" || !window.location.hostname.includes("onrender.com");
     const agentParam = wsPort === 3001 ? "apex" : "meridian";
     
     const wsUrl = isLocal
-      ? `ws://localhost:${wsPort}`
+      ? `ws://localhost:${wsPort}?agent=${agentParam}`
       : `wss://${window.location.hostname}?agent=${agentParam}`;
 
     const { 
