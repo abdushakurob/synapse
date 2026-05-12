@@ -1,37 +1,5 @@
-# Absolute Synapse P2P Container (Node 20 Optimized)
-FROM node:20-bullseye
-
-# Install FULL WebRTC build and runtime dependencies
-RUN apt-get update && apt-get install -y \
-    python3 \
-    make \
-    g++ \
-    libnss3-dev \
-    libasound2-dev \
-    libatk1.0-dev \
-    libdbus-1-dev \
-    libexpat1-dev \
-    libfontconfig1-dev \
-    libgbm-dev \
-    libglib2.0-dev \
-    libgtk-3-dev \
-    libnspr4-dev \
-    libpango1.0-dev \
-    libx11-dev \
-    libxcomposite-dev \
-    libxcursor-dev \
-    libxdamage-dev \
-    libxext-dev \
-    libxfixes-dev \
-    libxi-dev \
-    libxrandr-dev \
-    libxrender-dev \
-    libxss-dev \
-    libxtst-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install global native build helpers
-RUN npm install -g node-pre-gyp
+# Synapse Pure-JS P2P Container
+FROM node:20-bullseye-slim
 
 WORKDIR /app
 
@@ -41,7 +9,7 @@ COPY sdk/package*.json ./sdk/
 COPY demo/package*.json ./demo/
 COPY cli/package*.json ./cli/
 
-# Install dependencies with native build enforcement
+# Install dependencies (Fast! No native compilation)
 RUN npm install --legacy-peer-deps
 
 # Copy source code
