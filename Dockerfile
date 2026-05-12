@@ -1,40 +1,33 @@
-# Hardened Synapse Agent Container (WebRTC Optimized)
+# Hardened Synapse Agent Container (Native Build Optimized)
 FROM node:20-bullseye
 
-# Install FULL WebRTC runtime and build dependencies
+# Install FULL WebRTC build and runtime dependencies
 RUN apt-get update && apt-get install -y \
     python3 \
     make \
     g++ \
-    libnss3 \
-    libasound2 \
-    libatk1.0-0 \
-    libc6 \
-    libdbus-1-3 \
-    libexpat1 \
-    libfontconfig1 \
-    libgcc1 \
-    libgconf-2-4 \
-    libgdk-pixbuf2.0-0 \
-    libglib2.0-0 \
-    libgtk-3-0 \
-    libnspr4 \
-    libpango-1.0-0 \
-    libpangocairo-1.0-0 \
-    libstdc++6 \
-    libx11-6 \
-    libx11-xcb1 \
-    libxcb1 \
-    libxcomposite1 \
-    libxcursor1 \
-    libxdamage1 \
-    libxext6 \
-    libxfixes3 \
-    libxi6 \
-    libxrandr2 \
-    libxrender1 \
-    libxss1 \
-    libxtst6 \
+    libnss3-dev \
+    libasound2-dev \
+    libatk1.0-dev \
+    libdbus-1-dev \
+    libexpat1-dev \
+    libfontconfig1-dev \
+    libgbm-dev \
+    libglib2.0-dev \
+    libgtk-3-dev \
+    libnspr4-dev \
+    libpango1.0-dev \
+    libx11-dev \
+    libxcomposite-dev \
+    libxcursor-dev \
+    libxdamage-dev \
+    libxext-dev \
+    libxfixes-dev \
+    libxi-dev \
+    libxrandr-dev \
+    libxrender-dev \
+    libxss-dev \
+    libxtst-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -45,8 +38,9 @@ COPY sdk/package*.json ./sdk/
 COPY demo/package*.json ./demo/
 COPY cli/package*.json ./cli/
 
-# Install dependencies (will compile wrtc natively)
-RUN npm install
+# Install dependencies (Forcing native build for wrtc)
+# We use --legacy-peer-deps to avoid monorepo linking issues during build
+RUN npm install --legacy-peer-deps
 
 # Copy source code
 COPY . .
