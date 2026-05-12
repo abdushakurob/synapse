@@ -7,13 +7,22 @@ import Peer from "simple-peer";
  */
 function getWrtc() {
   try {
+    // Try standard require first
     return require("wrtc");
   } catch (e) {
-    throw new Error(
-      "[Synapse SDK] The 'wrtc' dependency is missing. " +
-      "This is required for P2P connections in Node.js environments. " +
-      "Run 'npm install wrtc' to enable P2P communication."
-    );
+    try {
+      // Try resolving from the process root (monorepo support)
+      const path = require("path");
+      const rootWrtc = require.resolve("wrtc", { paths: [process.cwd(), path.join(process.cwd(), "..")] });
+      return require(rootWrtc);
+    } catch (e2) {
+      console.error(`[Synapse SDK] Failed to load 'wrtc'. Current directory: ${process.cwd()}`);
+      throw new Error(
+        "[Synapse SDK] The 'wrtc' dependency is missing. " +
+        "This is required for P2P connections in Node.js environments. " +
+        "Run 'npm install wrtc' to enable P2P communication."
+      );
+    }
   }
 }
 
