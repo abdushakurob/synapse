@@ -41,8 +41,8 @@ async function main() {
     process.exit(0);
   }
 
-  const walletFile = path.resolve(__dirname, "../../dev-wallet-b.json");
-  const walletKeypair = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(walletFile, "utf-8"))));
+  const { loadOrCreateWallet } = await import("../shared/wallet");
+  const walletKeypair = await loadOrCreateWallet("dev-wallet-b");
   const synapse = new Synapse({
     profile: config.alias,
     keypair: walletKeypair,

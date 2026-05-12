@@ -48,8 +48,8 @@ async function main() {
   }
 
   const responderAlias = process.env.RESPONDER_ALIAS || "meridian-trading-dev-stable";
-  const walletFile = path.resolve(__dirname, "../../dev-wallet-a.json");
-  const walletKeypair = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(walletFile, "utf-8"))));
+  const { loadOrCreateWallet } = await import("../shared/wallet");
+  const walletKeypair = await loadOrCreateWallet("dev-wallet-a");
   const synapse = new Synapse({
     profile: config.alias,
     keypair: walletKeypair,
